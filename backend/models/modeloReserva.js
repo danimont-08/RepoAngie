@@ -38,18 +38,28 @@ class ModeloReserva {
     `, [idApartamento]);
     return filas;
   }
-  
+
+  // Verifica que el apartamento tenga una reserva activa o aprobada en una fecha
   static async tieneReservaActiva(idApartamento, fecha) {
     const [filas] = await poolConexion.query(`
       SELECT id_reserva FROM reservas
-      WHERE id_apartamento = ? AND fecha_reserva = ? AND estado = 'activa'
+      WHERE id_apartamento = ? AND fecha_reserva = ? AND estado IN ('activa', 'aprobada')
+    `, [idApartamento, fecha]);
+    return filas.length > 0;
+  }
+
+  // Verifica que la reserva esté específicamente APROBADA (requerido para préstamos de insumos)
+  static async tieneReservaAprobada(idApartamento, fecha) {
+    const [filas] = await poolConexion.query(`
+      SELECT id_reserva FROM reservas
+      WHERE id_apartamento = ? AND fecha_reserva = ? AND estado = 'aprobada'
     `, [idApartamento, fecha]);
     return filas.length > 0;
   }
 
   static async verificarDisponibilidad(fechaReserva) {
     const [filas] = await poolConexion.query(
-      'SELECT id_reserva FROM reservas WHERE fecha_reserva = ? AND estado != "cancelada"', 
+      'SELECT id_reserva FROM reservas WHERE fecha_reserva = ? AND estado NOT IN ("cancelada", "rechazada")',
       [fechaReserva]
     );
     return filas.length === 0;
@@ -68,6 +78,28 @@ class ModeloReserva {
       'UPDATE reservas SET estado = "cancelada" WHERE id_reserva = ?',
       [idReserva]
     );
+    return resultado;
+  }
+
+  static async aprobar(idReserva) {
+    const [resultado] = await poolConexion.query(
+      'UPDATE reservas SET estado = "aprobada" WHERE id_reserva = ? AND estado = "activa"',
+      [idReserva]
+    );
+    if (resultado.affectedRows === 0) {
+      throw new Error('Reserva no encontrada o ya procesada');
+    }
+    return resultado;
+  }
+
+  static async rechazar(idReserva) {
+    const [resultado] = await poolConexion.query(
+      'UPDATE reservas SET estado = "rechazada" WHERE id_reserva = ? AND estado = "activa"',
+      [idReserva]
+    );
+    if (resultado.affectedRows === 0) {
+      throw new Error('Reserva no encontrada o ya procesada');
+    }
     return resultado;
   }
 }

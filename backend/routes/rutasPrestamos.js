@@ -15,7 +15,13 @@ const verificarAdminOsSpervisor = (req, res, next) => {
 // Rutas
 router.get('/', verificarToken, verificarAdminOsSpervisor, controladorPrestamos.obtenerTodos);
 router.get('/mis-prestamos', verificarToken, controladorPrestamos.obtenerMisPrestamos);
-router.post('/', verificarToken, controladorPrestamos.crear);
+// Solo admin y residente crean préstamos; supervisor supervisa devoluciones
+router.post('/', verificarToken, (req, res, next) => {
+  if (req.usuario.rol === 'supervisor') {
+    return res.status(403).json({ exito: false, mensaje: 'El supervisor no puede crear préstamos directamente. Debe hacerlo el residente o el administrador.' });
+  }
+  next();
+}, controladorPrestamos.crear);
 router.put('/:id/devolver', verificarToken, controladorPrestamos.devolver);
 
 module.exports = router;

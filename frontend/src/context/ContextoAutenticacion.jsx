@@ -8,9 +8,10 @@ export function ProveedorAutenticacion({ children }) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    // Usamos sessionStorage: se borra automáticamente al cerrar la pestaña/ventana
     const verificarSesion = async () => {
-      const token = localStorage.getItem('token_salon');
-      const usuarioGuardado = localStorage.getItem('usuario_salon');
+      const token = sessionStorage.getItem('token_salon');
+      const usuarioGuardado = sessionStorage.getItem('usuario_salon');
 
       if (token && usuarioGuardado) {
         try {
@@ -30,8 +31,8 @@ export function ProveedorAutenticacion({ children }) {
   }, []);
 
   const limpiarSesion = () => {
-    localStorage.removeItem('token_salon');
-    localStorage.removeItem('usuario_salon');
+    sessionStorage.removeItem('token_salon');
+    sessionStorage.removeItem('usuario_salon');
     setUsuario(null);
   };
 
@@ -41,8 +42,8 @@ export function ProveedorAutenticacion({ children }) {
       const datos = respuesta.data;
 
       if (datos.exito) {
-        localStorage.setItem('token_salon', datos.token);
-        localStorage.setItem('usuario_salon', JSON.stringify(datos.usuario));
+        sessionStorage.setItem('token_salon', datos.token);
+        sessionStorage.setItem('usuario_salon', JSON.stringify(datos.usuario));
         setUsuario(datos.usuario);
         return { exito: true, mensaje: datos.mensaje };
       }
@@ -59,10 +60,11 @@ export function ProveedorAutenticacion({ children }) {
 
   const esAdmin = usuario?.rol === 'administrador';
   const esSupervisor = usuario?.rol === 'supervisor';
+  const esResidente = usuario?.rol === 'residente';
 
   return (
     <ContextoAutenticacion.Provider
-      value={{ usuario, cargando, iniciarSesion, cerrarSesion, esAdmin, esSupervisor }}
+      value={{ usuario, cargando, iniciarSesion, cerrarSesion, esAdmin, esSupervisor, esResidente }}
     >
       {children}
     </ContextoAutenticacion.Provider>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/ContextoAutenticacion';
 import { servicioInventario } from '../services/servicioApi';
+import { servicioReservas } from '../services/servicioReservas';
 import ModalInventario from '../components/ModalInventario';
 import ModalPrestar from '../components/ModalPrestar';
 import ModalPrestamosActivos from '../components/ModalPrestamosActivos';
@@ -9,7 +10,7 @@ import { servicioPrestamos } from '../services/servicioPrestamos';
 import './PaginaInventario.css';
 
 export default function PaginaInventario() {
-  const { esAdmin, esSupervisor } = useAuth();
+  const { esAdmin, esSupervisor, esResidente } = useAuth();
   const puedeEditar = esAdmin || esSupervisor;
 
   const [insumos, setInsumos] = useState([]);
@@ -18,7 +19,8 @@ export default function PaginaInventario() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [insumoEditar, setInsumoEditar] = useState(null);
   const [mensaje, setMensaje] = useState(null);
-  
+  const [tieneReservaAprobada, setTieneReservaAprobada] = useState(false);
+
   const [modalPrestarAbierto, setModalPrestarAbierto] = useState(false);
   const [insumoPrestar, setInsumoPrestar] = useState(null);
   const [modalPrestamosActivosAbierto, setModalPrestamosActivosAbierto] = useState(false);
@@ -39,6 +41,17 @@ export default function PaginaInventario() {
   useEffect(() => {
     cargarInsumos();
   }, [cargarInsumos]);
+
+  // Verificar si el residente tiene al menos una reserva aprobada
+  useEffect(() => {
+    if (!esResidente) return;
+    servicioReservas.obtenerMisReservas()
+      .then(res => {
+        const aprobadas = (res.data.datos || []).filter(r => r.estado === 'aprobada');
+        setTieneReservaAprobada(aprobadas.length > 0);
+      })
+      .catch(() => setTieneReservaAprobada(false));
+  }, [esResidente]);
 
   const mostrarMensaje = (tipo, texto) => {
     setMensaje({ tipo, texto });
@@ -84,8 +97,9 @@ export default function PaginaInventario() {
 
   const guardarPrestamo = async (datos) => {
     try {
-      await servicioPrestamos.crear(datos);
-      mostrarMensaje('success', 'Préstamo registrado exitosamente');
+      const respuesta = await servicioPrestamos.crear(datos);
+      const msg = respuesta.data?.mensaje || 'Préstamo registrado exitosamente';
+      mostrarMensaje('success', msg);
       setModalPrestarAbierto(false);
       setInsumoPrestar(null);
       cargarInsumos();
@@ -230,14 +244,17 @@ export default function PaginaInventario() {
                         </div>
                       </td>
                       <td className="text-end">
-                        <button
-                          className="btn btn-sm btn-outline-success me-1"
-                          onClick={() => abrirModalPrestar(insumo)}
-                          title="Prestar"
-                          disabled={insumo.cantidad_disponible === 0}
-                        >
-                          <i className="bi bi-box-arrow-right"></i>
-                        </button>
+                        {/* Residente: solo si tiene reserva aprobada | Admin/Supervisor: siempre */}
+                        {(!esResidente || tieneReservaAprobada) && (
+                          <button
+                            className="btn btn-sm btn-outline-success me-1"
+                            onClick={() => abrirModalPrestar(insumo)}
+                            title={esResidente ? 'Solicitar insumo' : 'Prestar'}
+                            disabled={insumo.cantidad_disponible === 0}
+                          >
+                            <i className="bi bi-box-arrow-right"></i>
+                          </button>
+                        )}
                         {puedeEditar && (
                           <>
                             <button

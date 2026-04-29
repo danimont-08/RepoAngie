@@ -7,10 +7,10 @@ const apiCliente = axios.create({
   },
 });
 
-// Interceptor para agregar token a cada petición
+// Interceptor para agregar token a cada petición (sessionStorage)
 apiCliente.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token_salon');
+    const token = sessionStorage.getItem('token_salon');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -19,26 +19,21 @@ apiCliente.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Interceptor de respuesta: si 401 → sesión inválida → limpiar y redirigir al login
 apiCliente.interceptors.response.use(
   (respuesta) => respuesta,
   (error) => {
     if (error.response && error.response.status === 401) {
-      console.log("Token inválido o credenciales incorrectas");
+      // Solo redirigir si no estamos ya en la pantalla de login
+      if (!window.location.pathname.includes('/login')) {
+        sessionStorage.removeItem('token_salon');
+        sessionStorage.removeItem('usuario_salon');
+        window.location.href = '/login';
+      }
     }
-
     return Promise.reject(error);
   }
 );
-// Interceptor para manejar errores de autenticación
-
-//VERSIÓN ANTERIOR
-    //if (error.response && error.response.status === 401) {
-   //   localStorage.removeItem('token_salon');
-   //   localStorage.removeItem('usuario_salon');
-    //  window.location.href = '/login';
-  //  }
-  //  return Promise.reject(error);
-
 
 // ==================== AUTENTICACIÓN ====================
 export const servicioAuth = {
@@ -91,4 +86,4 @@ export const servicioInventario = {
     apiCliente.get('/inventario/estadisticas'),
 };
 
-export default apiCliente;
+export default apiCliente;

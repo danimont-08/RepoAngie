@@ -4,16 +4,24 @@ import { useAuth } from '../context/ContextoAutenticacion';
 import './LayoutPrincipal.css';
 
 export default function LayoutPrincipal({ children }) {
-  const { usuario, cerrarSesion, esAdmin } = useAuth();
+  const { usuario, cerrarSesion, esAdmin, esSupervisor } = useAuth();
   const ubicacion = useLocation();
   const [menuAbierto, setMenuAbierto] = useState(false);
 
+  // Menú diferenciado por rol
   const elementosMenu = [
     { ruta: '/dashboard', etiqueta: 'Panel Principal', icono: 'bi-speedometer2' },
+    // Solo admin ve Usuarios
     ...(esAdmin ? [{ ruta: '/usuarios', etiqueta: 'Usuarios', icono: 'bi-people' }] : []),
-    { ruta: '/inventario', etiqueta: 'Inventario', icono: 'bi-box-seam' },
-    ...(!esAdmin ? [{ ruta: '/reservas', etiqueta: 'Reservas', icono: 'bi-calendar-event' }] : []),
+    // Admin y Supervisor ven Inventario
+    ...(esAdmin || esSupervisor ? [{ ruta: '/inventario', etiqueta: 'Inventario', icono: 'bi-box-seam' }] : []),
+    // Admin y Residente ven Reservas (Supervisor NO)
+    ...(!esSupervisor ? [{ ruta: '/reservas', etiqueta: 'Reservas', icono: 'bi-calendar-event' }] : []),
+    // Solo Residente ve Mis Préstamos
+    ...(!esAdmin && !esSupervisor ? [{ ruta: '/mis-prestamos', etiqueta: 'Mis Préstamos', icono: 'bi-box-arrow-right' }] : []),
   ];
+
+  const etiquetaRol = esAdmin ? 'Administrador' : esSupervisor ? 'Supervisor' : 'Residente';
 
   const esRutaActiva = (ruta) => ubicacion.pathname === ruta;
 
@@ -73,7 +81,7 @@ export default function LayoutPrincipal({ children }) {
             <div className="text-truncate">
               <div className="small fw-medium text-truncate">{usuario?.nombreTitular}</div>
               <div className="text-white-50" style={{ fontSize: 11 }}>
-                {usuario?.rol === 'administrador' ? 'Admin' : usuario?.rol === 'supervisor' ? 'Supervisor' : 'Residente'} · Apt {usuario?.idApartamento}
+                {etiquetaRol} · Apt {usuario?.idApartamento}
               </div>
             </div>
           </div>
@@ -106,3 +114,4 @@ export default function LayoutPrincipal({ children }) {
     </div>
   );
 }
+

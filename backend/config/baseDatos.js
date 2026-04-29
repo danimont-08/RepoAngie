@@ -10,6 +10,10 @@ const poolConexion = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  // dateStrings: true hace que mysql2 devuelva fechas siempre como string
+  // "YYYY-MM-DD" o "YYYY-MM-DD HH:mm:ss", evitando errores de zona horaria
+  // y el bug "Invalid Date" en el frontend.
+  dateStrings: true,
 });
 
 const verificarConexion = async () => {

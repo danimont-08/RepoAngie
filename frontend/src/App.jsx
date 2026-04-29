@@ -5,10 +5,11 @@ import PaginaDashboard from './pages/PaginaDashboard';
 import PaginaUsuarios from './pages/PaginaUsuarios';
 import PaginaInventario from './pages/PaginaInventario';
 import PaginaReservas from './pages/PaginaReservas';
+import PaginaMisPrestamos from './pages/PaginaMisPrestamos';
 import LayoutPrincipal from './components/LayoutPrincipal';
 
-function RutaProtegida({ children, soloAdmin = false, sinAdmins = false }) {
-  const { usuario, cargando, esAdmin } = useAuth();
+function RutaProtegida({ children, soloAdmin = false, soloNoSupervisor = false, soloResidente = false }) {
+  const { usuario, cargando, esAdmin, esSupervisor } = useAuth();
 
   if (cargando) {
     return (
@@ -22,7 +23,10 @@ function RutaProtegida({ children, soloAdmin = false, sinAdmins = false }) {
 
   if (!usuario) return <Navigate to="/login" replace />;
   if (soloAdmin && !esAdmin) return <Navigate to="/dashboard" replace />;
-  if (sinAdmins && esAdmin) return <Navigate to="/dashboard" replace />;
+  // soloNoSupervisor: solo admin y residentes acceden, supervisor va al dashboard
+  if (soloNoSupervisor && esSupervisor) return <Navigate to="/dashboard" replace />;
+  // soloResidente: solo residentes; admin y supervisor van al dashboard
+  if (soloResidente && (esAdmin || esSupervisor)) return <Navigate to="/dashboard" replace />;
 
   return <LayoutPrincipal>{children}</LayoutPrincipal>;
 }
@@ -46,9 +50,12 @@ export default function App() {
       <Route path="/dashboard" element={<RutaProtegida><PaginaDashboard /></RutaProtegida>} />
       <Route path="/usuarios" element={<RutaProtegida soloAdmin><PaginaUsuarios /></RutaProtegida>} />
       <Route path="/inventario" element={<RutaProtegida><PaginaInventario /></RutaProtegida>} />
-      <Route path="/reservas" element={<RutaProtegida sinAdmins><PaginaReservas /></RutaProtegida>} />
+      {/* Reservas: accesible por admin y residente; supervisor va al dashboard */}
+      <Route path="/reservas" element={<RutaProtegida soloNoSupervisor><PaginaReservas /></RutaProtegida>} />
+      {/* Mis Préstamos: solo residentes */}
+      <Route path="/mis-prestamos" element={<RutaProtegida soloResidente><PaginaMisPrestamos /></RutaProtegida>} />
       <Route path="/" element={<Navigate to={usuario ? '/dashboard' : '/login'} replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
-}
+}

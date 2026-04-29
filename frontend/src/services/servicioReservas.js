@@ -5,5 +5,7 @@ export const servicioReservas = {
   obtenerPorMes: (year, month) => api.get(`/reservas/mes?year=${year}&month=${month}`),
   obtenerMisReservas: () => api.get('/reservas/mias'),
   crear: (datos) => api.post('/reservas', datos),
-  cancelar: (id) => api.put(`/reservas/${id}/cancelar`)
+  cancelar: (id) => api.put(`/reservas/${id}/cancelar`),
+  aprobar: (id) => api.put(`/reservas/${id}/aprobar`),
+  rechazar: (id) => api.put(`/reservas/${id}/rechazar`),
 };
