@@ -391,7 +391,12 @@ export default function PaginaReservas() {
                         return diaR === dia && (r.estado === 'activa' || r.estado === 'aprobada');
                       });
                       const estaReservado = reservasDelDia.length > 0;
-                      const reservaAprobada = reservasDelDia.some(r => r.estado === 'aprobada');
+                      
+                      // DIFERENCIACIÓN: IDENTIFICAR SI ES MI RESERVA O DE OTRO USUARIO
+                      const misReservasDelDia = reservasDelDia.filter(r => r.id_apartamento === usuario.idApartamento);
+                      const esReservaMia = misReservasDelDia.length > 0;
+                      const reservaAprobada = misReservasDelDia.some(r => r.estado === 'aprobada');
+                      const reservasOtrosDelDia = reservasDelDia.filter(r => r.id_apartamento !== usuario.idApartamento);
 
                       let claseColor = 'bg-light text-dark';
                       let cursor = 'pointer';
@@ -401,10 +406,16 @@ export default function PaginaReservas() {
                         claseColor = 'text-muted opacity-25';
                         cursor = 'not-allowed';
                         title = esMuyPronto ? 'Mín 48h de anticipación' : 'Máx 90 días permitidos';
-                      } else if (estaReservado) {
+                      } else if (esReservaMia) {
+                        // MIS RESERVAS: Mantener colores diferenciados (rojo=pendiente, verde=aprobada)
                         claseColor = reservaAprobada ? 'bg-success text-white opacity-75' : 'bg-danger text-white opacity-75';
                         cursor = 'not-allowed';
-                        title = `${reservaAprobada ? 'Reserva aprobada' : 'Reservado'} — Apt ${reservasDelDia[0].id_apartamento}`;
+                        title = reservaAprobada ? 'Tu reserva: Aprobada' : 'Tu reserva: Pendiente';
+                      } else if (reservasOtrosDelDia.length > 0) {
+                        // RESERVA DE OTRO USUARIO: Color "OCUPADO"
+                        claseColor = 'bg-secondary text-white opacity-60';
+                        cursor = 'not-allowed';
+                        title = `Ocupado por otro usuario (Apt ${reservasOtrosDelDia[0].id_apartamento})`;
                       } else if (esHoy) {
                         claseColor = 'bg-primary text-white';
                         if (noPermitido && !esAdmin) cursor = 'not-allowed';
@@ -441,11 +452,15 @@ export default function PaginaReservas() {
             </div>
             <div className="d-flex align-items-center gap-2 text-muted">
               <span className="rounded-circle bg-danger opacity-75 d-inline-block" style={{ width: 12, height: 12 }}></span>
-              Pendiente
+              Mi reserva: Pendiente
             </div>
             <div className="d-flex align-items-center gap-2 text-muted">
               <span className="rounded-circle bg-success opacity-75 d-inline-block" style={{ width: 12, height: 12 }}></span>
-              Aprobada
+              Mi reserva: Aprobada
+            </div>
+            <div className="d-flex align-items-center gap-2 text-muted">
+              <span className="rounded-circle bg-secondary opacity-60 d-inline-block" style={{ width: 12, height: 12 }}></span>
+              Ocupado (otro usuario)
             </div>
             <div className="d-flex align-items-center gap-2 text-muted">
               <span className="rounded-circle bg-primary d-inline-block" style={{ width: 12, height: 12 }}></span>

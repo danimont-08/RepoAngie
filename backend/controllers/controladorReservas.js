@@ -78,6 +78,15 @@ const controladorReservas = {
         return res.status(400).json({ exito: false, mensaje: 'Esa fecha ya se encuentra reservada. Por favor, elige otra.' });
       }
 
+      // RESTRICCIÓN: VALIDAR QUE NO TENGA OTRA RESERVA ACTIVA EN VIGENCIA
+      const yaHayReservaActiva = await ModeloReserva.tieneReservaActivaVigente(id_apartamento);
+      if (yaHayReservaActiva) {
+        return res.status(400).json({ 
+          exito: false, 
+          mensaje: 'Ya tienes una reserva activa o aprobada en vigencia. Solo puedes tener una reserva activa a la vez.' 
+        });
+      }
+
       const resultado = await ModeloReserva.crear({
         idApartamento: id_apartamento,
         fechaReserva: fecha_reserva

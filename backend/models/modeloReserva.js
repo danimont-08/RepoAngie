@@ -48,6 +48,17 @@ class ModeloReserva {
     return filas.length > 0;
   }
 
+  // RESTRICCIÓN: VERIFICAR SI EL USUARIO YA TIENE UNA RESERVA ACTIVA/APROBADA VIGENTE
+  static async tieneReservaActivaVigente(idApartamento) {
+    const hoy = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+    const [filas] = await poolConexion.query(`
+      SELECT id_reserva FROM reservas
+      WHERE id_apartamento = ? AND fecha_reserva >= ? AND estado IN ('activa', 'aprobada')
+      LIMIT 1
+    `, [idApartamento, hoy]);
+    return filas.length > 0;
+  }
+
   // Verifica que la reserva esté específicamente APROBADA (requerido para préstamos de insumos)
   static async tieneReservaAprobada(idApartamento, fecha) {
     const [filas] = await poolConexion.query(`
