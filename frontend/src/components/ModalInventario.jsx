@@ -3,8 +3,9 @@ import { useState } from 'react';
 export default function ModalInventario({ insumo, onGuardar, onCerrar }) {
   const esEdicion = !!insumo;
 
+  //ESTADO DEL FORMULARIO c3-4 -
   const [formulario, setFormulario] = useState({
-    nombreInsumo: insumo?.nombre_insumo || '',
+    nombreInsumo: insumo?.nombre_insumo || '', //CAMPOS
     cantidadTotal: insumo?.cantidad_total || 0,
     cantidadDisponible: insumo?.cantidad_disponible || 0,
   });
@@ -16,6 +17,7 @@ export default function ModalInventario({ insumo, onGuardar, onCerrar }) {
     setErrorValidacion('');
   };
 
+//FUNCION DE VALIDACION - stock
   const validar = () => {
     if (!formulario.nombreInsumo.trim()) {
       setErrorValidacion('El nombre del insumo es obligatorio');
@@ -40,6 +42,7 @@ export default function ModalInventario({ insumo, onGuardar, onCerrar }) {
     setGuardando(false);
   };
 
+//ESTRUCTURA MODAL -
   return (
     <>
       <div className="modal-backdrop fade show"></div>
@@ -61,6 +64,8 @@ export default function ModalInventario({ insumo, onGuardar, onCerrar }) {
                   </div>
                 )}
 
+
+
                 <div className="mb-3">
                   <label className="form-label small fw-medium">Nombre del Insumo</label>
                   <input
@@ -72,6 +77,9 @@ export default function ModalInventario({ insumo, onGuardar, onCerrar }) {
                     required
                   />
                 </div>
+              
+
+
                 <div className="row g-3">
                   <div className="col-6">
                     <label className="form-label small fw-medium">Cantidad Total</label>

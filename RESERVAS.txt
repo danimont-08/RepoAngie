@@ -1,0 +1,753 @@
+================================================================================
+GUÍA: CÓMO AGREGAR NUEVOS CAMPOS A LA TABLA RESERVAS
+================================================================================
+
+Objetivo: Agregar dos nuevos campos a las reservas:
+  • motivo (STRING) - El motivo o descripción de la reserva
+  • capacidad_esperada (INT) - Cantidad de personas esperadas
+
+Estos cambios permitirán registrar una nueva reserva con los nuevos campos
+usando el formulario de registro en el frontend, y guardarlos en la BD.
+
+================================================================================
+1. AGREGAR CAMPOS EN LA BASE DE DATOS
+================================================================================
+
+OPCIÓN A: Si es la PRIMERA VEZ (tabla vacía o en construcción)
+
+Archivo: Cualquier script SQL que cree la tabla reservas
+Busca la sentencia CREATE TABLE reservas y localiza esta línea:
+    estado ENUM('activa', 'cancelada', 'completada') DEFAULT 'activa',
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+Reemplázala por:
+    estado ENUM('activa', 'cancelada', 'completada') DEFAULT 'activa',
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    motivo VARCHAR(500),
+    capacidad_esperada INT DEFAULT 1,
+
+
+OPCIÓN B: Si YA EXISTEN DATOS EN LA TABLA
+
+Ejecuta estos comandos en phpMyAdmin (ir a Operaciones > SQL):
+  ALTER TABLE reservas ADD COLUMN motivo VARCHAR(500);
+  ALTER TABLE reservas ADD COLUMN capacidad_esperada INT DEFAULT 1;
+
+✓ QUÉ SIGNIFICAN:
+  • motivo VARCHAR(500) → Campo de texto de hasta 500 caracteres para la descripción
+  • capacidad_esperada INT DEFAULT 1 → Campo numérico con valor por defecto 1 (personas)
+
+
+================================================================================
+2. ACTUALIZAR MODELO (Backend)
+================================================================================
+
+Archivo: backend/models/modeloReserva.js
+
+>>> CAMBIO 1: En la función obtenerPorMes()
+
+Busca (aproximadamente línea 12):
+    const [filas] = await poolConexion.query(`
+      SELECT r.id_reserva, r.fecha_reserva, r.estado, u.nombre_titular, u.id_apartamento
+      FROM reservas r
+      JOIN usuarios u ON r.id_apartamento = u.id_apartamento
+      WHERE r.fecha_reserva >= ? AND r.fecha_reserva < ?
+      ORDER BY r.fecha_reserva ASC
+    `, [fechaInicio, fechaFin]);
+
+Reemplázalo por:
+    const [filas] = await poolConexion.query(`
+      SELECT r.id_reserva, r.fecha_reserva, r.estado, r.motivo, r.capacidad_esperada, u.nombre_titular, u.id_apartamento
+      FROM reservas r
+      JOIN usuarios u ON r.id_apartamento = u.id_apartamento
+      WHERE r.fecha_reserva >= ? AND r.fecha_reserva < ?
+      ORDER BY r.fecha_reserva ASC
+    `, [fechaInicio, fechaFin]);
+
+✓ POR QUÉ: Incluye los nuevos campos en la consulta para el calendario
+
+
+>>> CAMBIO 2: En la función obtenerTodas()
+
+Busca (aproximadamente línea 24):
+    const [filas] = await poolConexion.query(`
+      SELECT r.id_reserva, r.fecha_reserva, r.estado, r.fecha_creacion, u.nombre_titular, u.id_apartamento
+      FROM reservas r
+      JOIN usuarios u ON r.id_apartamento = u.id_apartamento
+      ORDER BY r.fecha_reserva DESC
+    `);
+
+Reemplázalo por:
+    const [filas] = await poolConexion.query(`
+      SELECT r.id_reserva, r.fecha_reserva, r.estado, r.fecha_creacion, r.motivo, r.capacidad_esperada, u.nombre_titular, u.id_apartamento
+      FROM reservas r
+      JOIN usuarios u ON r.id_apartamento = u.id_apartamento
+      ORDER BY r.fecha_reserva DESC
+    `);
+
+✓ POR QUÉ: Incluye los nuevos campos cuando obtienes TODAS las reservas
+
+
+>>> CAMBIO 3: Buscar la función crear() en ModeloReserva
+
+Busca (aproximadamente línea 50-60, busca algo como):
+    static async crear(datosReserva) {
+      const { idApartamento, fechaReserva } = datosReserva;
+      const [resultado] = await poolConexion.query(
+        'INSERT INTO reservas (id_apartamento, fecha_reserva, estado) VALUES (?, ?, ?)',
+        [idApartamento, fechaReserva, 'activa']
+      );
+
+Reemplázalo por:
+    static async crear(datosReserva) {
+      const { idApartamento, fechaReserva, motivo, capacidadEsperada } = datosReserva;
+      const [resultado] = await poolConexion.query(
+        'INSERT INTO reservas (id_apartamento, fecha_reserva, motivo, capacidad_esperada, estado) VALUES (?, ?, ?, ?, ?)',
+        [idApartamento, fechaReserva, motivo || null, capacidadEsperada || 1, 'activa']
+      );
+
+✓ POR QUÉ: 
+  • Extrae los nuevos campos del objeto datosReserva
+  • Inserta los nuevos campos en la BD
+  • motivo puede ser null si no se envía
+  • capacidad_esperada por defecto es 1 si no se envía
+
+
+================================================================================
+3. ACTUALIZAR CONTROLADOR (Backend)
+================================================================================
+
+Archivo: backend/controllers/controladorReservas.js
+
+>>> CAMBIO 1: En la función crear()
+
+Busca (aproximadamente línea 45):
+    const { fecha_reserva } = req.body;
+
+Reemplázalo por:
+    const { fecha_reserva, motivo, capacidad_esperada } = req.body;
+
+✓ POR QUÉ: Extrae los nuevos campos del cuerpo de la solicitud HTTP
+
+
+>>> CAMBIO 2: En la función crear(), busca donde llama a ModeloReserva.crear()
+
+Busca algo similar (aproximadamente línea 85-95):
+    const resultado = await ModeloReserva.crear({
+      idApartamento: id_apartamento,
+      fechaReserva: fecha_reserva,
+    });
+
+Reemplázalo por:
+    const resultado = await ModeloReserva.crear({
+      idApartamento: id_apartamento,
+      fechaReserva: fecha_reserva,
+      motivo: motivo || null,
+      capacidadEsperada: capacidad_esperada || 1,
+    });
+
+✓ POR QUÉ: Pasa los nuevos campos al modelo para guardarlos en BD
+
+
+================================================================================
+4. ACTUALIZAR FORMULARIO (Frontend)
+================================================================================
+
+Archivo: frontend/src/components/ModalPrestar.jsx (para registrar préstamos con reservas)
+O: frontend/src/pages/PaginaReservas.jsx (si existe un formulario de reservas)
+
+>>> Si es ModalPrestar.jsx - CAMBIO 1: En el useState de datosFormulario
+
+Busca (aproximadamente línea 17):
+  const [datosFormulario, setDatosFormulario] = useState({
+    id_apartamento: puedeEditar ? '' : (usuario?.idApartamento ?? ''),
+    cantidad:       1,
+    id_reserva:     ''
+  });
+
+Reemplázalo por:
+  const [datosFormulario, setDatosFormulario] = useState({
+    id_apartamento: puedeEditar ? '' : (usuario?.idApartamento ?? ''),
+    motivo:         '',
+    capacidad_esperada: 1,
+    cantidad:       1,
+    id_reserva:     ''
+  });
+
+✓ POR QUÉ: Agrega estados para los nuevos campos en el formulario
+
+
+>>> Si es ModalPrestar.jsx - CAMBIO 2: Agregar campos de entrada
+
+Después del input de cantidad, agrega:
+
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Motivo de la Reserva</label>
+                  <textarea
+                    name="motivo"
+                    className="form-control"
+                    rows="2"
+                    value={datosFormulario.motivo}
+                    onChange={handleChange}
+                    placeholder="Describe para qué es la reserva (ej: Reunión de junta, evento familiar)"
+                  />
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Personas Esperadas</label>
+                  <input
+                    type="number"
+                    name="capacidad_esperada"
+                    className="form-control"
+                    min="1"
+                    value={datosFormulario.capacidad_esperada}
+                    onChange={handleChange}
+                    placeholder="Cantidad de personas"
+                  />
+                </div>
+
+✓ POR QUÉ: Muestra los campos en el formulario para que el usuario los complete
+
+
+>>> Si es ModalPrestar.jsx - CAMBIO 3: En la función handleSubmit()
+
+Busca (aproximadamente línea 120):
+    onGuardar({
+      id_apartamento: aptId,
+      id_inventario:  insumo.id_inventario,
+      cantidad:       parseInt(datosFormulario.cantidad),
+      id_reserva:     parseInt(datosFormulario.id_reserva)
+    });
+
+Reemplázalo por:
+    onGuardar({
+      id_apartamento: aptId,
+      motivo:         datosFormulario.motivo,
+      capacidad_esperada: parseInt(datosFormulario.capacidad_esperada),
+      id_inventario:  insumo.id_inventario,
+      cantidad:       parseInt(datosFormulario.cantidad),
+      id_reserva:     parseInt(datosFormulario.id_reserva)
+    });
+
+✓ POR QUÉ: Envía los nuevos campos al backend
+
+
+================================================================================
+5. ACTUALIZAR SERVICIO API (Frontend)
+================================================================================
+
+Archivo: frontend/src/services/servicioApi.js
+
+Si existe la función servicioReservas.crear(), actualiza para enviar los nuevos campos:
+
+>>> CAMBIO 1: En la función que crea reservas
+
+Busca algo como:
+    static crearReserva(datosReserva) {
+      return api.post('/reservas', datosReserva);
+    }
+
+Si ya existe, NO NECESITA CAMBIOS. El servicio simplemente envía todo lo que recibe.
+
+✓ POR QUÉ: El servicio es genérico y envía todos los datos recibidos
+
+
+================================================================================
+6. FLUJO COMPLETO DE REGISTRO DE RESERVA
+================================================================================
+
+1️⃣ El usuario completa el formulario en el frontend:
+   - Fecha de Reserva
+   - Motivo (NUEVO) - Opcional
+   - Personas Esperadas (NUEVO) - Opcional, por defecto 1
+   - Cantidades de insumos a prestar
+
+2️⃣ El frontend envía una solicitud POST a /api/reservas con los datos
+
+3️⃣ El controlador recibe los datos y:
+   - Los valida (solo fecha_reserva es obligatoria)
+   - Verifica disponibilidad de la fecha
+   - Valida anticipación mínima (48 horas)
+   - Llama al modelo para insertar en BD
+
+4️⃣ El modelo inserta todos los campos, INCLUYENDO los nuevos:
+   - motivo (puede ser NULL)
+   - capacidad_esperada (por defecto 1)
+
+5️⃣ La BD guarda el registro con los nuevos campos completos
+
+6️⃣ La reserva se crea exitosamente
+
+✓ VERIFICAR QUE FUNCIONA:
+  • Completa el formulario de nueva reserva en el frontend
+  • Verifica en phpMyAdmin que los campos se guardaron correctamente
+  • Edita una reserva y verifica que los campos se cargan correctamente
+
+
+================================================================================
+RESUMEN DE CAMBIOS
+================================================================================
+
+ARCHIVO                                        CAMBIOS
+─────────────────────────────────────────────────────────────────────────────
+sql/vivimostodos.sql                           Agregar 2 columnas en CREATE TABLE
+backend/models/modeloReserva.js                3 cambios: obtenerPorMes, obtenerTodas, crear
+backend/controllers/controladorReservas.js     2 cambios: extraer y pasar nuevos campos
+frontend/src/components/ModalPrestar.jsx       3 cambios: estado, inputs, handleSubmit
+
+
+================================================================================
+ORDEN RECOMENDADO PARA IMPLEMENTAR
+================================================================================
+
+1. Primero: sql/vivimostodos.sql (agregar columnas en BD)
+2. Segundo: backend/models/modeloReserva.js (actualizar queries)
+3. Tercero: backend/controllers/controladorReservas.js (pasar nuevos datos)
+4. Cuarto: frontend/src/components/ModalPrestar.jsx (agregar formulario)
+
+Después de hacer los cambios:
+• Reinicia el servidor backend
+• Recarga la página del frontend (Ctrl+F5)
+• Prueba crear una nueva reserva con los campos adicionales
+
+
+================================================================================
+COMANDOS SQL ÚTILES (Para verificar después)
+================================================================================
+
+Ver estructura de la tabla:
+  DESCRIBE reservas;
+
+Ver todas las reservas con los nuevos campos:
+  SELECT id_reserva, fecha_reserva, motivo, capacidad_esperada, estado FROM reservas;
+
+Ver reservas por motivo específico:
+  SELECT id_reserva, fecha_reserva, motivo, capacidad_esperada FROM reservas WHERE motivo LIKE '%reunión%';
+
+Ver capacidad promedio de reservas:
+  SELECT AVG(capacidad_esperada) as capacidad_promedio FROM reservas WHERE estado = 'activa';
+================================================================================
+
+  static async tieneReservaActivaVigente(idApartamento) {
+    const hoy = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+    const [filas] = await poolConexion.query(`
+      SELECT id_reserva FROM reservas
+      WHERE id_apartamento = ? AND fecha_reserva >= ? AND estado IN ('activa', 'aprobada')
+      LIMIT 1
+    `, [idApartamento, hoy]);
+    return filas.length > 0;
+  }
+
+✓ SIGNIFICADO: Verifica si un usuario ya tiene una reserva activa o aprobada en el futuro
+
+
+>>> CAMBIO 4 (línea ~50): Reemplazar método tieneReservaActiva()
+
+Busca:
+  static async tieneReservaActiva(idApartamento, fecha) {
+    const [filas] = await poolConexion.query(`
+      SELECT id_reserva FROM reservas
+      WHERE id_apartamento = ? AND fecha_reserva = ? AND estado IN ('activa', 'aprobada')
+    `, [idApartamento, fecha]);
+    return filas.length > 0;
+  }
+
+Reemplázalo por:
+  static async tieneReservaActiva(idApartamento, fecha) {
+    const [filas] = await poolConexion.query(`
+      SELECT id_reserva FROM reservas
+      WHERE id_apartamento = ? AND fecha_reserva = ? AND estado = 'activa'
+    `, [idApartamento, fecha]);
+    return filas.length > 0;
+  }
+
+✓ SIGNIFICADO: Verifica si hay una reserva ACTIVA en una fecha específica
+
+
+>>> CAMBIO 5 (línea ~60): Agregar nuevo método tieneReservaAprobada()
+
+Después del método tieneReservaActiva(), agrega:
+
+  // Verifica que la reserva esté específicamente APROBADA (requerido para préstamos de insumos)
+  static async tieneReservaAprobada(idApartamento, fecha) {
+    const [filas] = await poolConexion.query(`
+      SELECT id_reserva FROM reservas
+      WHERE id_apartamento = ? AND fecha_reserva = ? AND estado = 'aprobada'
+    `, [idApartamento, fecha]);
+    return filas.length > 0;
+  }
+
+✓ SIGNIFICADO: Verifica si un usuario tiene una reserva APROBADA en una fecha (para préstamos)
+
+
+>>> CAMBIO 6 (línea ~80): En la función crear()
+
+Busca:
+    static async crear({ idApartamento, fechaReserva }) {
+      const [resultado] = await poolConexion.query(
+        'INSERT INTO reservas (id_apartamento, fecha_reserva, estado) VALUES (?, ?, "activa")',
+        [idApartamento, fechaReserva]
+      );
+      return resultado;
+    }
+
+Reemplázalo por:
+    static async crear({ idApartamento, fechaReserva, motivo, capacidadEsperada }) {
+      const [resultado] = await poolConexion.query(
+        'INSERT INTO reservas (id_apartamento, fecha_reserva, estado, motivo, capacidad_esperada) VALUES (?, ?, "activa", ?, ?)',
+        [idApartamento, fechaReserva, motivo || null, capacidadEsperada || 1]
+      );
+      return resultado;
+    }
+
+✓ SIGNIFICADO:
+  • Extrae los nuevos campos del objeto de parámetros
+  • Agrega motivo (puede ser null si no se envía)
+  • Agrega capacidad_esperada (por defecto 1 si no se envía)
+
+
+>>> CAMBIO 7: Reemplazar método cancelar() y agregar aprobar() y rechazar()
+
+Busca:
+  static async cancelar(idReserva) {
+    const [resultado] = await poolConexion.query(
+      'UPDATE reservas SET estado = "cancelada" WHERE id_reserva = ?',
+      [idReserva]
+    );
+    return resultado;
+  }
+}
+
+Reemplázalo por:
+  static async cancelar(idReserva) {
+    const [resultado] = await poolConexion.query(
+      'UPDATE reservas SET estado = "cancelada" WHERE id_reserva = ?',
+      [idReserva]
+    );
+    return resultado;
+  }
+
+  static async aprobar(idReserva) {
+    const [resultado] = await poolConexion.query(
+      'UPDATE reservas SET estado = "aprobada" WHERE id_reserva = ? AND estado = "activa"',
+      [idReserva]
+    );
+    if (resultado.affectedRows === 0) {
+      throw new Error('Reserva no encontrada o ya procesada');
+    }
+    return resultado;
+  }
+
+  static async rechazar(idReserva) {
+    const [resultado] = await poolConexion.query(
+      'UPDATE reservas SET estado = "rechazada" WHERE id_reserva = ? AND estado = "activa"',
+      [idReserva]
+    );
+    if (resultado.affectedRows === 0) {
+      throw new Error('Reserva no encontrada o ya procesada');
+    }
+    return resultado;
+  }
+}
+
+✓ SIGNIFICADO:
+  • aprobar() cambia estado de 'activa' a 'aprobada' (función administrativa)
+  • rechazar() cambia estado de 'activa' a 'rechazada' (función administrativa)
+  • Ambas verifican que la reserva esté en estado 'activa' antes de procesar
+
+
+================================================================================
+3. ACTUALIZAR CONTROLADOR (Backend)
+================================================================================
+
+Archivo: backend/controllers/controladorReservas.js
+
+>>> CAMBIO 1 (línea ~50): En la función crear()
+
+Busca:
+      const { fecha_reserva } = req.body;
+      let id_apartamento = req.body.id_apartamento;
+
+Reemplázalo por:
+      const { fecha_reserva, motivo, capacidad_esperada } = req.body;
+      let id_apartamento = req.body.id_apartamento;
+
+✓ SIGNIFICADO: Extrae los nuevos campos del cuerpo de la solicitud
+
+
+>>> CAMBIO 2 (misma función crear, alrededor de línea ~70): En el bloque de validación MEJORADO
+
+IMPORTANTE: La versión comentada tiene validaciones ADICIONALES más robustas.
+Considera reemplazar TODO el bloque de validación por:
+
+Busca:
+      if (!id_apartamento || !fecha_reserva) {
+        return res.status(400).json({ exito: false, mensaje: 'Faltan campos requeridos' });
+      }
+
+      // Validar si la fecha es en el pasado
+      const hoy = new Date();
+      hoy.setHours(0,0,0,0);
+      const fechaReq = new Date(fecha_reserva + "T00:00:00");
+      if (fechaReq < hoy) {
+        return res.status(400).json({ exito: false, mensaje: 'No puedes reservar una fecha en el pasado' });
+      }
+
+      // Validar disponibilidad
+      const disponible = await ModeloReserva.verificarDisponibilidad(fecha_reserva);
+      if (!disponible) {
+        return res.status(400).json({ exito: false, mensaje: 'Esa fecha ya se encuentra reservada. Por favor, elige otra.' });
+      }
+
+Reemplázalo por (VALIDACIÓN MEJORADA):
+      if (!id_apartamento || !fecha_reserva) {
+        return res.status(400).json({ exito: false, mensaje: 'Faltan campos requeridos' });
+      }
+
+      if (motivo && motivo.trim().length > 500) {
+        return res.status(400).json({ exito: false, mensaje: 'El motivo no puede exceder 500 caracteres' });
+      }
+
+      if (capacidad_esperada && capacidad_esperada < 1) {
+        return res.status(400).json({ exito: false, mensaje: 'La capacidad esperada debe ser mayor a 0' });
+      }
+
+      // VALIDACIÓN MEJORADA: Anticipación mínima de 48 horas
+      const ahora = new Date();
+      const fechaReq = new Date(fecha_reserva + 'T00:00:00');
+      const diferenciaMs = fechaReq.getTime() - ahora.getTime();
+      const horasDeAnticipacion = diferenciaMs / (1000 * 60 * 60);
+
+      if (horasDeAnticipacion < 48) {
+        return res.status(400).json({
+          exito: false,
+          mensaje: 'Las reservas deben hacerse con al menos 48 horas de anticipación.',
+        });
+      }
+
+      // VALIDACIÓN MEJORADA: Máximo 90 días en adelante
+      const limiteMaximo = new Date();
+      limiteMaximo.setDate(limiteMaximo.getDate() + 90);
+      limiteMaximo.setHours(23, 59, 59, 999);
+
+      if (fechaReq > limiteMaximo) {
+        return res.status(400).json({
+          exito: false,
+          mensaje: 'No puedes reservar con más de 90 días de anticipación.',
+        });
+      }
+
+      // Validar disponibilidad
+      const disponible = await ModeloReserva.verificarDisponibilidad(fecha_reserva);
+      if (!disponible) {
+        return res.status(400).json({ exito: false, mensaje: 'Esa fecha ya se encuentra reservada. Por favor, elige otra.' });
+      }
+
+      // RESTRICCIÓN: VALIDAR QUE NO TENGA OTRA RESERVA ACTIVA EN VIGENCIA
+      const yaHayReservaActiva = await ModeloReserva.tieneReservaActivaVigente(id_apartamento);
+      if (yaHayReservaActiva) {
+        return res.status(400).json({ 
+          exito: false, 
+          mensaje: 'Ya tienes una reserva activa o aprobada en vigencia. Solo puedes tener una reserva activa a la vez.' 
+        });
+      }
+
+✓ SIGNIFICADO:
+  • Valida campos adicionales (motivo, capacidad)
+  • Requiere 48 horas mínimas de anticipación
+  • Limita a máximo 90 días en adelante
+  • Verifica que el usuario no tenga reservas activas vigentes
+
+
+>>> CAMBIO 3 (misma función crear, alrededor de línea ~110): En el mensaje de respuesta
+
+Busca:
+      res.status(201).json({ 
+        exito: true, 
+        mensaje: 'Reserva confirmada exitosamente',
+        id_reserva: resultado.insertId 
+      });
+
+Reemplázalo por:
+      res.status(201).json({ 
+        exito: true, 
+        mensaje: 'Reserva creada exitosamente. Queda pendiente de aprobación por el administrador.',
+        id_reserva: resultado.insertId 
+      });
+
+✓ SIGNIFICADO: Refleja el flujo de aprobación de reservas
+
+
+>>> CAMBIO 4 (al final del archivo): Agregar métodos aprobar() y rechazar()
+
+DESPUÉS de la función cancelar(), agrega estos dos métodos:
+
+  aprobar: async (req, res) => {
+    try {
+      const { id } = req.params;
+      await ModeloReserva.aprobar(id);
+      res.json({ exito: true, mensaje: 'Reserva aprobada correctamente' });
+    } catch (error) {
+      console.error('Error al aprobar reserva:', error);
+      if (error.message.includes('no encontrada') || error.message.includes('ya procesada')) {
+        return res.status(400).json({ exito: false, mensaje: error.message });
+      }
+      res.status(500).json({ exito: false, mensaje: 'Error al aprobar la reserva' });
+    }
+  },
+
+  rechazar: async (req, res) => {
+    try {
+      const { id } = req.params;
+      await ModeloReserva.rechazar(id);
+      res.json({ exito: true, mensaje: 'Reserva rechazada correctamente' });
+    } catch (error) {
+      console.error('Error al rechazar reserva:', error);
+      if (error.message.includes('no encontrada') || error.message.includes('ya procesada')) {
+        return res.status(400).json({ exito: false, mensaje: error.message });
+      }
+      res.status(500).json({ exito: false, mensaje: 'Error al rechazar la reserva' });
+    }
+  }
+
+✓ SIGNIFICADO: 
+  • aprobar() aprueba una reserva (solo si está en estado 'activa')
+  • rechazar() rechaza una reserva (solo si está en estado 'activa')
+  • Ambas son funciones administrativas
+
+
+================================================================================
+4. ACTUALIZAR COMPONENTE MODAL (Frontend)
+================================================================================
+
+Archivo: frontend/src/components/ModalPrestar.jsx
+(O donde esté el formulario para crear reservas)
+
+>>> CAMBIO 1 (línea ~8): En el hook useState del formulario
+
+Busca:
+  const [formulario, setFormulario] = useState({
+    fecha_reserva: '',
+  });
+
+Reemplázalo por:
+  const [formulario, setFormulario] = useState({
+    fecha_reserva: '',
+    motivo: '',
+    capacidad_esperada: 1,
+  });
+
+✓ SIGNIFICADO: Agrega los nuevos campos al estado del formulario
+
+
+>>> CAMBIO 2 (después de los campos existentes): Agrega los inputs HTML
+
+Busca:
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Fecha</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={formulario.fecha_reserva}
+                    onChange={(e) => manejarCambio('fecha_reserva', e.target.value)}
+                    required
+                  />
+                </div>
+
+Después de este bloque, agrega:
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Motivo de la Reserva</label>
+                  <textarea
+                    className="form-control"
+                    value={formulario.motivo}
+                    onChange={(e) => manejarCambio('motivo', e.target.value)}
+                    placeholder="Ej: Reunión familiar, Evento..."
+                    rows="3"
+                    maxLength="500"
+                  />
+                  <small className="text-muted">{formulario.motivo.length}/500</small>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Capacidad Esperada (personas)</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    min="1"
+                    value={formulario.capacidad_esperada}
+                    onChange={(e) => manejarCambio('capacidad_esperada', parseInt(e.target.value) || 1)}
+                  />
+                </div>
+
+✓ SIGNIFICADO:
+  • motivo es un textarea para descripciones más largas con contador
+  • capacidad_esperada es un input numérico con mínimo de 1
+
+
+================================================================================
+5. ACTUALIZAR SERVICIO API (Frontend)
+================================================================================
+
+Archivo: frontend/src/services/servicioReservas.js (si existe)
+O donde hagas las peticiones POST para crear reservas
+
+Busca la función que hace POST a /reservas:
+    const response = await fetch('http://localhost:5000/api/reservas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(datosReserva)
+    });
+
+El objeto datosReserva debe incluir los nuevos campos:
+    {
+      fecha_reserva: '2026-05-15',
+      motivo: 'Reunión familiar',
+      capacidad_esperada: 15,
+      id_apartamento: 206
+    }
+
+✓ SIGNIFICADO: Asegúrate de que los datos del formulario se envíen correctamente al servidor
+
+
+================================================================================
+RESUMEN DE CAMBIOS
+================================================================================
+
+Base de Datos:
+  ✓ Agregar 2 columnas a la tabla reservas
+
+Backend - Modelo:
+  ✓ Actualizar obtenerPorMes() para incluir nuevos campos
+  ✓ Actualizar obtenerTodas() para incluir nuevos campos
+  ✓ Agregar método tieneReservaActivaVigente()
+  ✓ Actualizar método tieneReservaActiva()
+  ✓ Agregar método tieneReservaAprobada()
+  ✓ Actualizar crear() para aceptar y guardar nuevos campos
+  ✓ Agregar método aprobar()
+  ✓ Agregar método rechazar()
+
+Backend - Controlador:
+  ✓ Extraer nuevos campos de req.body
+  ✓ Validar los nuevos campos
+  ✓ Agregar validaciones mejoradas (48 horas, 90 días)
+  ✓ Verificar reserva activa vigente
+  ✓ Pasar nuevos campos a ModeloReserva.crear()
+  ✓ Actualizar mensaje de respuesta
+  ✓ Agregar método aprobar()
+  ✓ Agregar método rechazar()
+
+Frontend - Componente:
+  ✓ Agregar estado para los nuevos campos
+  ✓ Agregar inputs al formulario
+  ✓ Asegurar que se envíen en la solicitud POST
+
+================================================================================
+NOTAS IMPORTANTES
+================================================================================
+
+1. Si usas TypeScript, actualiza también las interfaces/types
+2. Los validadores en el controlador son opcionales pero recomendados
+3. Si tienes un servicio dedicado para API, actualiza también ese archivo
+4. Asegúrate de que la capacidad_esperada sea un número positivo
+5. El motivo puede ser null (reserva sin descripción) pero se recomienda solicitarlo
+6. Si agregaste más métodos en el modelo (aprobar, rechazar), también actualiza esos SELECT

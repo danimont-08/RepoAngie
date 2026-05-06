@@ -3,6 +3,7 @@ import { useState } from 'react';
 export default function ModalUsuario({ usuario, onGuardar, onCerrar }) {
   const esEdicion = !!usuario;
 
+//FORMULARIO 2C
   const [formulario, setFormulario] = useState({
     idApartamento: usuario?.id_apartamento || '',
     nombreTitular: usuario?.nombre_titular || '',
@@ -22,6 +23,8 @@ export default function ModalUsuario({ usuario, onGuardar, onCerrar }) {
     await onGuardar(formulario);
     setGuardando(false);
   };
+
+// MODAL USUARIOS
 
   return (
     <>
@@ -49,6 +52,8 @@ export default function ModalUsuario({ usuario, onGuardar, onCerrar }) {
                     disabled={esEdicion}
                   />
                 </div>
+
+
                 <div className="mb-3">
                   <label className="form-label small fw-medium">Nombre del Titular</label>
                   <input
@@ -60,6 +65,8 @@ export default function ModalUsuario({ usuario, onGuardar, onCerrar }) {
                     required
                   />
                 </div>
+
+                
                 <div className="mb-3">
                   <label className="form-label small fw-medium">Correo Electrónico</label>
                   <input

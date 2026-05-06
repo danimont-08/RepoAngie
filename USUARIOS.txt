@@ -1,0 +1,354 @@
+================================================================================
+GUÍA: CÓMO AGREGAR NUEVOS CAMPOS A LA TABLA USUARIOS
+================================================================================
+
+Objetivo: Agregar dos nuevos campos a los usuarios:
+  • torre (INT) - El número de la torre del edificio
+  • apellido (STRING) - El apellido del titular
+
+Estos cambios permitirán registrar un nuevo usuario con los nuevos campos
+usando el formulario de registro en el frontend, y guardarlos en la BD.
+
+================================================================================
+1. AGREGAR CAMPOS EN LA BASE DE DATOS
+================================================================================
+
+OPCIÓN A: Si es la PRIMERA VEZ (tabla vacía o en construcción)
+
+Archivo: Cualquier script SQL que cree la tabla usuarios
+Busca la sentencia CREATE TABLE usuarios y localiza esta línea:
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+Reemplázala por:
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    apellido VARCHAR(100),
+    torre INT
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+OPCIÓN B: Si YA EXISTEN DATOS EN LA TABLA
+
+Ejecuta estos comandos en phpMyAdmin (ir a Operaciones > SQL):
+  ALTER TABLE usuarios ADD COLUMN apellido VARCHAR(100);
+  ALTER TABLE usuarios ADD COLUMN torre INT;
+
+✓ QUÉ SIGNIFICAN:
+  • apellido VARCHAR(100) → Campo de texto de hasta 100 caracteres
+  • torre INT → Campo numérico entero (ej: 1, 2, 3, 4, etc.)
+
+
+================================================================================
+2. ACTUALIZAR MODELO (Backend)
+================================================================================
+
+Archivo: backend/models/modeloUsuario.js
+
+>>> CAMBIO 1: En la función obtenerTodos()
+
+Busca (aproximadamente línea 6):
+    const [filas] = await poolConexion.query(
+      'SELECT id_apartamento, nombre_titular, correo, rol, estado, fecha_registro FROM usuarios ORDER BY id_apartamento'
+    );
+
+Reemplázalo por:
+    const [filas] = await poolConexion.query(
+      'SELECT id_apartamento, nombre_titular, apellido, torre, correo, rol, estado, fecha_registro FROM usuarios ORDER BY id_apartamento'
+    );
+
+✓ POR QUÉ: Incluye los nuevos campos en la lista de todos los usuarios
+
+
+>>> CAMBIO 2: En la función obtenerPorId()
+
+Busca (aproximadamente línea 13):
+    const [filas] = await poolConexion.query(
+      'SELECT id_apartamento, nombre_titular, correo, rol, estado, fecha_registro FROM usuarios WHERE id_apartamento = ?',
+      [idApartamento]
+    );
+
+Reemplázalo por:
+    const [filas] = await poolConexion.query(
+      'SELECT id_apartamento, nombre_titular, apellido, torre, correo, rol, estado, fecha_registro FROM usuarios WHERE id_apartamento = ?',
+      [idApartamento]
+    );
+
+✓ POR QUÉ: Incluye los nuevos campos cuando obtienes un usuario específico
+
+
+>>> CAMBIO 3: En la función crear()
+
+Busca (aproximadamente línea 38):
+    const { idApartamento, nombreTitular, correo, contrasena, rol } = datosUsuario;
+    const [resultado] = await poolConexion.query(
+      'INSERT INTO usuarios (id_apartamento, nombre_titular, correo, contrasena, rol, estado) VALUES (?, ?, ?, ?, ?, 1)',
+      [idApartamento, nombreTitular, correo, contrasena, rol || 'residente']
+    );
+
+Reemplázalo por:
+    const { idApartamento, nombreTitular, apellido, torre, correo, contrasena, rol } = datosUsuario;
+    const [resultado] = await poolConexion.query(
+      'INSERT INTO usuarios (id_apartamento, nombre_titular, apellido, torre, correo, contrasena, rol, estado) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+      [idApartamento, nombreTitular, apellido, torre, correo, contrasena, rol || 'residente']
+    );
+
+✓ POR QUÉ: Extrae apellido y torre del formulario y los inserta en la BD
+
+
+>>> CAMBIO 4: En la función actualizar()
+
+Busca (aproximadamente línea 51):
+    const { nombreTitular, correo, rol } = datosUsuario;
+    const [resultado] = await poolConexion.query(
+      'UPDATE usuarios SET nombre_titular = ?, correo = ?, rol = ? WHERE id_apartamento = ?',
+      [nombreTitular, correo, rol, idApartamento]
+    );
+
+Reemplázalo por:
+    const { nombreTitular, apellido, torre, correo, rol } = datosUsuario;
+    const [resultado] = await poolConexion.query(
+      'UPDATE usuarios SET nombre_titular = ?, apellido = ?, torre = ?, correo = ?, rol = ? WHERE id_apartamento = ?',
+      [nombreTitular, apellido, torre, correo, rol, idApartamento]
+    );
+
+✓ SIGNIFICADO:
+  • Extrae los nuevos campos para actualización
+  • Agraga los campos a la sentencia UPDATE
+
+
+================================================================================
+3. ACTUALIZAR CONTROLADOR (Backend)
+================================================================================
+
+Archivo: backend/controllers/controladorUsuarios.js
+
+>>> CAMBIO 1 (línea ~35): En la función crear()
+
+Busca:
+    const { idApartamento, nombreTitular, correo, contrasena, rol } = req.body;
+
+    if (!idApartamento || !nombreTitular || !correo || !contrasena) {
+      return res.status(400).json({
+        exito: false,
+        mensaje: 'Todos los campos son obligatorios',
+      });
+    }
+
+Reemplázalo por:
+    const { idApartamento, nombreTitular, apellido, torre, correo, contrasena, rol } = req.body;
+
+    if (!idApartamento || !nombreTitular || !apellido || !correo || !contrasena) {
+      return res.status(400).json({
+        exito: false,
+        mensaje: 'Todos los campos son obligatorios',
+      });
+    }
+
+✓ SIGNIFICADO:
+  • Extrae los nuevos campos del body de la petición
+  • Valida que apellido sea obligatorio (torres puede ser opcional)
+
+
+>>> CAMBIO 2 (línea ~53): En la función crear(), en la llamada ModeloUsuario.crear()
+
+Busca:
+    await ModeloUsuario.crear({
+      idApartamento,
+      nombreTitular,
+      correo,
+      contrasena: contrasenaHash,
+      rol: rol || 'residente',
+    });
+
+Reemplázalo por:
+    await ModeloUsuario.crear({
+      idApartamento,
+      nombreTitular,
+      apellido,
+      torre,
+      correo,
+      contrasena: contrasenaHash,
+      rol: rol || 'residente',
+    });
+
+✓ SIGNIFICADO: Pasa los nuevos campos al modelo para que se guarden en BD
+
+
+>>> CAMBIO 3 (línea ~76): En la función actualizar()
+
+Busca:
+    const { nombreTitular, correo, rol, contrasena } = req.body;
+
+Reemplázalo por:
+    const { nombreTitular, apellido, torre, correo, rol, contrasena } = req.body;
+
+✓ SIGNIFICADO: Extrae los nuevos campos del body de la petición
+
+
+>>> CAMBIO 4 (línea ~85): En la función actualizar(), en la llamada ModeloUsuario.actualizar()
+
+Busca:
+    await ModeloUsuario.actualizar(idApartamento, {
+      nombreTitular: nombreTitular || existente.nombre_titular,
+      correo: correo || existente.correo,
+      rol: rol || existente.rol,
+    });
+
+Reemplázalo por:
+    await ModeloUsuario.actualizar(idApartamento, {
+      nombreTitular: nombreTitular || existente.nombre_titular,
+      apellido: apellido || existente.apellido,
+      torre: torre !== undefined ? torre : existente.torre,
+      correo: correo || existente.correo,
+      rol: rol || existente.rol,
+    });
+
+✓ SIGNIFICADO:
+  • Pasa los campos para actualizar
+  • Si no se envían, mantiene los valores anteriores con || (operador OR)
+
+
+================================================================================
+4. ACTUALIZAR FORMULARIO (Frontend)
+================================================================================
+
+Archivo: frontend/src/components/ModalUsuario.jsx
+
+>>> CAMBIO 1 (línea ~10): En el estado inicial del formulario
+
+Busca:
+  const [formulario, setFormulario] = useState({
+    idApartamento: usuario?.id_apartamento || '',
+    nombreTitular: usuario?.nombre_titular || '',
+    correo: usuario?.correo || '',
+    contrasena: '',
+    rol: usuario?.rol || 'residente',
+  });
+
+Reemplázalo por:
+  const [formulario, setFormulario] = useState({
+    idApartamento: usuario?.id_apartamento || '',
+    nombreTitular: usuario?.nombre_titular || '',
+    apellido: usuario?.apellido || '',
+    torre: usuario?.torre || '',
+    correo: usuario?.correo || '',
+    contrasena: '',
+    rol: usuario?.rol || 'residente',
+  });
+
+✓ SIGNIFICADO:
+  • Agraga los nuevos campos al estado del formulario
+  • Si es edición, carga los valores actuales; si es creación, deja vacío
+
+
+>>> CAMBIO 2 (línea ~47 aprox): En la sección de inputs del formulario
+
+Localiza el input de "Nombre del Titular" (después de "Nº Apartamento") y agrega después de él:
+
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Apellido</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={formulario.apellido}
+                    onChange={(e) => manejarCambio('apellido', e.target.value)}
+                    placeholder="Apellido del titular"
+                    required
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Torre</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={formulario.torre}
+                    onChange={(e) => manejarCambio('torre', Number(e.target.value))}
+                    placeholder="Ej: 1, 2, 3"
+                  />
+                </div>
+
+✓ SIGNIFICADO:
+  • Crea dos nuevos inputs en el formulario
+  • apellido es type="text" (texto)
+  • torre es type="number" (número)
+  • Ambos actualizan el estado cuando cambian
+  • El apellido es required (obligatorio), la torre es opcional
+
+
+================================================================================
+5. ACTUALIZAR TABLA DE VISUALIZACIÓN (Frontend - Opcional)
+================================================================================
+
+Archivo: frontend/src/pages/PaginaUsuarios.jsx
+
+Si deseas mostrar los nuevos campos en la tabla de usuarios, agrega columnas en el <thead>:
+
+>>> En el <tr> de encabezados (línea ~110 aprox):
+
+Busca:
+              <tr>
+                <th className="small fw-semibold text-muted">Apartamento</th>
+                <th className="small fw-semibold text-muted">Titular</th>
+                <th className="small fw-semibold text-muted d-none d-md-table-cell">Correo</th>
+                <th className="small fw-semibold text-muted">Rol</th>
+                <th className="small fw-semibold text-muted">Estado</th>
+                <th className="small fw-semibold text-muted text-end">Acciones</th>
+              </tr>
+
+Reemplázalo por:
+              <tr>
+                <th className="small fw-semibold text-muted">Apartamento</th>
+                <th className="small fw-semibold text-muted">Titular</th>
+                <th className="small fw-semibold text-muted d-none d-md-table-cell">Apellido</th>
+                <th className="small fw-semibold text-muted d-none d-md-table-cell">Torre</th>
+                <th className="small fw-semibold text-muted d-none d-md-table-cell">Correo</th>
+                <th className="small fw-semibold text-muted">Rol</th>
+                <th className="small fw-semibold text-muted">Estado</th>
+                <th className="small fw-semibold text-muted text-end">Acciones</th>
+              </tr>
+
+Y agrega las filas correspondientes en el <tbody>, después de {u.nombre_titular}:
+                <td className="d-none d-md-table-cell">{u.apellido}</td>
+                <td className="d-none d-md-table-cell">{u.torre}</td>
+
+
+================================================================================
+RESUMEN DE CAMBIOS
+================================================================================
+
+ARCHIVO                                    CAMBIOS
+─────────────────────────────────────────────────────────────────────────────
+sql/vivimostodos.sql                       4 líneas: Agregar columnas (apellido, torre)
+backend/models/modeloUsuario.js            4 funciones: Agregar campos a SELECT e INSERT/UPDATE
+backend/controllers/controladorUsuarios.js 4 cambios: Validar y pasar nuevos campos
+frontend/src/components/ModalUsuario.jsx   2 cambios: Agregar campos al estado y formulario
+frontend/src/pages/PaginaUsuarios.jsx      Opcional: Mostrar columnas en tabla
+
+
+================================================================================
+ORDEN RECOMENDADO PARA IMPLEMENTAR
+================================================================================
+
+1. Primero: sql/vivimostodos.sql (agregar columnas en BD)
+2. Segundo: backend/models/modeloUsuario.js (actualizar queries)
+3. Tercero: backend/controllers/controladorUsuarios.js (validar y pasar datos)
+4. Cuarto: frontend/src/components/ModalUsuario.jsx (agregar formulario)
+5. Quinto (Opcional): frontend/src/pages/PaginaUsuarios.jsx (mostrar en tabla)
+
+Después de hacer los cambios:
+• Reinicia el servidor backend
+• Recarga la página del frontend (Ctrl+F5)
+• Prueba crear un nuevo usuario con los campos adicionales
+
+
+================================================================================
+NOTAS IMPORTANTES
+================================================================================
+
+✓ El campo apellido es STRING (VARCHAR) porque es texto
+✓ El campo torre es INT porque es un número entero
+✓ Se recomienda hacer que apellido sea obligatorio (required)
+✓ Se recomienda dejar torre como opcional (puede ser NULL)
+✓ No olvides actualizar también el SQL si ya tienes datos en la tabla
+✓ Usa phpMyAdmin para ejecutar los ALTER TABLE si tienes datos existentes
+================================================================================

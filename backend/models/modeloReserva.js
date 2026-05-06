@@ -1,11 +1,11 @@
 const { poolConexion } = require('../config/baseDatos');
 
 class ModeloReserva {
-  // Obtener todas las reservas de un mes y año específicos (para el calendario)
+  // OBTENER TODAS LAS RESERVAS POR MES C3 -
   static async obtenerPorMes(year, month) {
-    // month is 1-12
+  
     const fechaInicio = `${year}-${month.toString().padStart(2, '0')}-01`;
-    // Calculamos el próximo mes para el límite superior
+    
     const nextMonth = month === 12 ? 1 : month + 1;
     const nextYear = month === 12 ? year + 1 : year;
     const fechaFin = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
@@ -20,6 +20,7 @@ class ModeloReserva {
     return filas;
   }
 
+// OBTENER TODAS LAS RESERVAS -
   static async obtenerTodas() {
     const [filas] = await poolConexion.query(`
       SELECT r.id_reserva, r.fecha_reserva, r.estado, r.fecha_creacion, u.nombre_titular, u.id_apartamento
@@ -39,7 +40,7 @@ class ModeloReserva {
     return filas;
   }
 
-  // Verifica que el apartamento tenga una reserva activa o aprobada en una fecha
+  // VERIFICACIÓN RESERVA ACTIVA
   static async tieneReservaActiva(idApartamento, fecha) {
     const [filas] = await poolConexion.query(`
       SELECT id_reserva FROM reservas
@@ -50,7 +51,7 @@ class ModeloReserva {
 
   // RESTRICCIÓN: VERIFICAR SI EL USUARIO YA TIENE UNA RESERVA ACTIVA/APROBADA VIGENTE
   static async tieneReservaActivaVigente(idApartamento) {
-    const hoy = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+    const hoy = new Date().toISOString().split('T')[0]; 
     const [filas] = await poolConexion.query(`
       SELECT id_reserva FROM reservas
       WHERE id_apartamento = ? AND fecha_reserva >= ? AND estado IN ('activa', 'aprobada')
@@ -59,7 +60,7 @@ class ModeloReserva {
     return filas.length > 0;
   }
 
-  // Verifica que la reserva esté específicamente APROBADA (requerido para préstamos de insumos)
+  //VERIFICACIÓN DE APROBACIÓN RESERVA
   static async tieneReservaAprobada(idApartamento, fecha) {
     const [filas] = await poolConexion.query(`
       SELECT id_reserva FROM reservas
@@ -76,6 +77,8 @@ class ModeloReserva {
     return filas.length === 0;
   }
 
+
+// CREAR NUEVA RESERVA -
   static async crear({ idApartamento, fechaReserva }) {
     const [resultado] = await poolConexion.query(
       'INSERT INTO reservas (id_apartamento, fecha_reserva, estado) VALUES (?, ?, "activa")',

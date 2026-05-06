@@ -3,29 +3,25 @@ import { servicioUsuarios } from '../services/servicioApi';
 import { servicioReservas } from '../services/servicioReservas';
 import { useAuth } from '../context/ContextoAutenticacion';
 
-/**
- * Modal para registrar un préstamo de insumo.
- * Las fechas se asignan automáticamente en el backend a partir de la reserva seleccionada:
- *   - fecha_prestamo = fecha de la reserva a las 00:00:00
- *   - fecha_espera   = misma fecha a las 23:59:59
- */
-export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
+
+export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {//C3
   const { esAdmin, esSupervisor, usuario } = useAuth();
   const puedeEditar = esAdmin || esSupervisor;
 
-  // ── Estado ─────────────────────────────────────────────────────────────────
+  // ESTADOS
   const [usuarios, setUsuarios]               = useState([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(false);
   const [reservasAprobadas, setReservasAprobadas] = useState([]);
   const [cargandoReservas, setCargandoReservas] = useState(false);
 
+//FORMULARIO -
   const [datosFormulario, setDatosFormulario] = useState({
     id_apartamento: puedeEditar ? '' : (usuario?.idApartamento ?? ''),
     cantidad:       1,
     id_reserva:     ''
   });
 
-  // ── Cargar usuarios (sólo admin/supervisor) ────────────────────────────────
+  // CARGAR USUARIOS
   useEffect(() => {
     if (!puedeEditar) return;
     setCargandoUsuarios(true);
@@ -35,7 +31,7 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
       .finally(() => setCargandoUsuarios(false));
   }, [puedeEditar]);
 
-  // ── Cargar reservas aprobadas cuando cambia el apartamento seleccionado ────
+  // CARGAR RESERVAS APROBADAS DEL APARTAMENTO SELECCIONADO
   useEffect(() => {
     const aptId = puedeEditar
       ? datosFormulario.id_apartamento
@@ -47,7 +43,7 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
     }
 
     setCargandoReservas(true);
-    // Obtenemos todas las reservas (admin) o las propias (residente)
+  
     const promesa = puedeEditar
       ? servicioReservas.obtenerTodas()
       : servicioReservas.obtenerMisReservas();
@@ -55,7 +51,7 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
     promesa
       .then(res => {
         const todas = res.data.datos || [];
-        // Filtrar: reservas aprobadas del apartamento seleccionado
+        
         const aprobadas = todas.filter(
           r => r.estado === 'aprobada' && String(r.id_apartamento) === String(aptId)
         );
@@ -67,7 +63,7 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
       .finally(() => setCargandoReservas(false));
   }, [datosFormulario.id_apartamento, puedeEditar, usuario]);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  
   const handleChange = (e) => {
     const { name, value } = e.target;
     setDatosFormulario(prev => ({ ...prev, [name]: value }));
@@ -76,7 +72,7 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
   const formatearFechaReserva = (fechaStr) => {
     if (!fechaStr) return '';
     const s = String(fechaStr);
-    // "YYYY-MM-DD" sin hora → UTC midnight en JS → día anterior en UTC-5. Forzar hora local.
+
     const f = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T00:00:00' : s.replace(' ', 'T'));
     if (isNaN(f.getTime())) return fechaStr;
     return f.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -86,7 +82,7 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
     r => String(r.id_reserva) === String(datosFormulario.id_reserva)
   );
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  
   const handleSubmit = (e) => {
     e.preventDefault();
 
@@ -94,6 +90,7 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
       ? parseInt(datosFormulario.id_apartamento)
       : usuario?.idApartamento;
 
+// ENVIAR DATOS AL BACKEND -
     onGuardar({
       id_apartamento: aptId,
       id_inventario:  insumo.id_inventario,
@@ -107,7 +104,7 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
     ? datosFormulario.id_apartamento
     : usuario?.idApartamento;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  //RENDER -
   return (
     <>
       <div className="modal-backdrop fade show"></div>
@@ -202,6 +199,8 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
                   )}
                 </div>
 
+
+
                 {/* Cantidad */}
                 <div className="mb-3">
                   <label className="form-label small fw-semibold text-muted">
@@ -221,6 +220,8 @@ export default function ModalPrestar({ insumo, onGuardar, onCerrar }) {
                     Máximo disponible: {insumo?.cantidad_disponible}
                   </div>
                 </div>
+
+
 
               </div>
 

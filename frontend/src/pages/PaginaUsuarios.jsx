@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { servicioUsuarios } from '../services/servicioApi';
 import ModalUsuario from '../components/ModalUsuario';
-
+// CoolSpan a 8 linea 144 C2
 export default function PaginaUsuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -122,15 +122,17 @@ export default function PaginaUsuarios() {
         </div>
       </div>
 
-      {/* Tabla */}
+      {/* Tabla DATOS C*/}
       <div className="card shadow-sm border-0">
         <div className="table-responsive">
           <table className="table table-hover mb-0">
             <thead className="table-light">
               <tr>
                 <th className="small fw-semibold text-muted">Apartamento</th>
+
                 <th className="small fw-semibold text-muted">Titular</th>
-                <th className="small fw-semibold text-muted d-none d-md-table-cell">Correo</th>
+
+                <th className="small fw-semibold text-muted d-none d-md-table-cell">Correo</th> 
                 <th className="small fw-semibold text-muted">Rol</th>
                 <th className="small fw-semibold text-muted">Estado</th>
                 <th className="small fw-semibold text-muted text-end">Acciones</th>
@@ -154,7 +156,11 @@ export default function PaginaUsuarios() {
                 usuariosFiltrados.map((usuario) => (
                   <tr key={usuario.id_apartamento}>
                     <td className="fw-medium">{usuario.id_apartamento}</td>
+                    
+
                     <td>{usuario.nombre_titular}</td>
+
+
                     <td className="text-muted d-none d-md-table-cell">{usuario.correo}</td>
                     <td>
                       <span className={`badge ${

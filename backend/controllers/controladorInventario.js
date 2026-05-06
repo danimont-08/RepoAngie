@@ -1,5 +1,5 @@
 const ModeloInventario = require('../models/modeloInventario');
-
+//C3
 const ControladorInventario = {
   obtenerTodos: async (req, res) => {
     try {
@@ -27,6 +27,7 @@ const ControladorInventario = {
     }
   },
 
+//CREAR INSUMOS -
   crear: async (req, res) => {
     try {
       const { nombreInsumo, cantidadTotal, cantidadDisponible } = req.body;
@@ -52,6 +53,7 @@ const ControladorInventario = {
         });
       }
 
+//FUNCIÓN CREAR MODELO -
       await ModeloInventario.crear({ nombreInsumo, cantidadTotal, cantidadDisponible });
 
       return res.status(201).json({
@@ -64,6 +66,7 @@ const ControladorInventario = {
     }
   },
 
+//FUNCIÓN ACTUALIZAR -
   actualizar: async (req, res) => {
     try {
       const { idInventario } = req.params;
@@ -91,6 +94,7 @@ const ControladorInventario = {
         });
       }
 
+//FUNCIÓN ACTUALIZAR MODELO -
       await ModeloInventario.actualizar(idInventario, {
         nombreInsumo: nombreInsumo || existente.nombre_insumo,
         cantidadTotal: totalFinal,

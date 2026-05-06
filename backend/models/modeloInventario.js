@@ -1,5 +1,6 @@
 const { poolConexion } = require('../config/baseDatos');
 
+//OBTENER INSUMOS C2
 const ModeloInventario = {
   obtenerTodos: async () => {
     const [filas] = await poolConexion.query(
@@ -16,6 +17,7 @@ const ModeloInventario = {
     return filas[0] || null;
   },
 
+// CREAR INSUMOS -
   crear: async (datosInsumo) => {
     const { nombreInsumo, cantidadTotal, cantidadDisponible } = datosInsumo;
     const [resultado] = await poolConexion.query(
@@ -25,6 +27,7 @@ const ModeloInventario = {
     return resultado;
   },
 
+// ACTUALIZAR INSUMOS -
   actualizar: async (idInventario, datosInsumo) => {
     const { nombreInsumo, cantidadTotal, cantidadDisponible } = datosInsumo;
     const [resultado] = await poolConexion.query(

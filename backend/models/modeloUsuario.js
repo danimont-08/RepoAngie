@@ -1,5 +1,6 @@
-const { poolConexion } = require('../config/baseDatos');
+const { poolConexion } = require('../config/baseDatos'); //C4
 
+// OBTENER USUARIOS -
 const ModeloUsuario = {
   obtenerTodos: async () => {
     const [filas] = await poolConexion.query(
@@ -8,6 +9,7 @@ const ModeloUsuario = {
     return filas;
   },
 
+//OBTENER USUARIOS POR ID -
   obtenerPorId: async (idApartamento) => {
     const [filas] = await poolConexion.query(
       'SELECT id_apartamento, nombre_titular, correo, rol, estado, fecha_registro FROM usuarios WHERE id_apartamento = ?',
@@ -32,6 +34,7 @@ const ModeloUsuario = {
     return filas[0] || null;
   },
 
+// CREAR USUARIOS -
   crear: async (datosUsuario) => {
     const { idApartamento, nombreTitular, correo, contrasena, rol } = datosUsuario;
     const [resultado] = await poolConexion.query(
@@ -41,6 +44,7 @@ const ModeloUsuario = {
     return resultado;
   },
 
+//ACTUALIZAR USUARIOS -
   actualizar: async (idApartamento, datosUsuario) => {
     const { nombreTitular, correo, rol } = datosUsuario;
     const [resultado] = await poolConexion.query(

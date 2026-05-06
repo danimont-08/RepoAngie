@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const ModeloUsuario = require('../models/modeloUsuario');
 
-const SALT_ROUNDS = 10;
+const SALT_ROUNDS = 10; //C4
 
 const ControladorUsuarios = {
   obtenerTodos: async (req, res) => {
@@ -30,6 +30,7 @@ const ControladorUsuarios = {
     }
   },
 
+//CREAR USUARIOS -
   crear: async (req, res) => {
     try {
       const { idApartamento, nombreTitular, correo, contrasena, rol } = req.body;
@@ -51,6 +52,7 @@ const ControladorUsuarios = {
 
       const contrasenaHash = await bcrypt.hash(contrasena, SALT_ROUNDS);
 
+//FUNCIÓN CREAR MODELO -
       await ModeloUsuario.crear({
         idApartamento,
         nombreTitular,
@@ -72,6 +74,7 @@ const ControladorUsuarios = {
     }
   },
 
+//ACTUALIZAR USUARIOS -
   actualizar: async (req, res) => {
     try {
       const { idApartamento } = req.params;
@@ -82,6 +85,7 @@ const ControladorUsuarios = {
         return res.status(404).json({ exito: false, mensaje: 'Usuario no encontrado' });
       }
 
+//ACTUALIZAR USUARIOS MODELO -     
       await ModeloUsuario.actualizar(idApartamento, {
         nombreTitular: nombreTitular || existente.nombre_titular,
         correo: correo || existente.correo,

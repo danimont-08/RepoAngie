@@ -1,6 +1,6 @@
 const ModeloReserva = require('../models/modeloReserva');
 
-const controladorReservas = {
+const controladorReservas = { //C2
   obtenerTodas: async (req, res) => {
     try {
       const reservas = await ModeloReserva.obtenerTodas();
@@ -35,9 +35,10 @@ const controladorReservas = {
     }
   },
 
+//CREAR RESERVA -
   crear: async (req, res) => {
     try {
-      const { fecha_reserva } = req.body;
+      const { fecha_reserva } = req.body; //TOKEN
       let id_apartamento = req.body.id_apartamento;
       if (req.usuario.rol === 'residente') {
         id_apartamento = req.usuario.idApartamento;
@@ -60,7 +61,7 @@ const controladorReservas = {
         });
       }
 
-      // Validar máximo 90 días en adelante
+      // MÁXIMO 90 DÍAS DE ANTICIPACIÓN
       const limiteMaximo = new Date();
       limiteMaximo.setDate(limiteMaximo.getDate() + 90);
       limiteMaximo.setHours(23, 59, 59, 999);
@@ -72,7 +73,7 @@ const controladorReservas = {
         });
       }
 
-      // Validar disponibilidad
+      // VALIDAR DISPONIBILIDAD DE LA FECHA
       const disponible = await ModeloReserva.verificarDisponibilidad(fecha_reserva);
       if (!disponible) {
         return res.status(400).json({ exito: false, mensaje: 'Esa fecha ya se encuentra reservada. Por favor, elige otra.' });
@@ -87,6 +88,7 @@ const controladorReservas = {
         });
       }
 
+//FUNCIÓN CREAR RESERVA -
       const resultado = await ModeloReserva.crear({
         idApartamento: id_apartamento,
         fechaReserva: fecha_reserva

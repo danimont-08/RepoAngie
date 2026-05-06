@@ -1,0 +1,678 @@
+================================================================================
+GUÍA: CÓMO AGREGAR NUEVOS CAMPOS A LA TABLA INVENTARIO
+================================================================================
+
+Objetivo: Agregar tres nuevos campos al inventario:
+  • descripcion (STRING) - Descripción detallada del insumo
+  • stock_minimo (INT) - Cantidad mínima recomendada (para alertas)
+  • fecha_ingreso (DATETIME) - Fecha cuando se agregó el insumo
+
+Estos cambios permitirán registrar un nuevo insumo con los nuevos campos
+usando el formulario de registro en el frontend, y guardarlos en la BD.
+
+================================================================================
+1. AGREGAR CAMPOS EN LA BASE DE DATOS
+================================================================================
+
+OPCIÓN A: Si es la PRIMERA VEZ (tabla vacía o en construcción)
+
+Archivo: Cualquier script SQL que cree la tabla inventario
+Busca la sentencia CREATE TABLE inventario y localiza esta línea:
+    CHECK (cantidad_disponible >= 0 AND cantidad_disponible <= cantidad_total)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+Reemplázala por:
+    CHECK (cantidad_disponible >= 0 AND cantidad_disponible <= cantidad_total),
+    descripcion VARCHAR(500),
+    stock_minimo INT DEFAULT 5,
+    fecha_ingreso DATETIME DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+OPCIÓN B: Si YA EXISTEN DATOS EN LA TABLA
+
+Ejecuta estos comandos en phpMyAdmin (ir a Operaciones > SQL):
+  ALTER TABLE inventario ADD COLUMN descripcion VARCHAR(500);
+  ALTER TABLE inventario ADD COLUMN stock_minimo INT DEFAULT 5;
+  ALTER TABLE inventario ADD COLUMN fecha_ingreso DATETIME DEFAULT CURRENT_TIMESTAMP;
+
+✓ QUÉ SIGNIFICAN:
+  • descripcion VARCHAR(500) → Campo de texto de hasta 500 caracteres
+  • stock_minimo INT DEFAULT 5 → Campo numérico con valor por defecto 5
+  • fecha_ingreso DATETIME DEFAULT CURRENT_TIMESTAMP → Fecha automática de creación
+
+
+================================================================================
+2. ACTUALIZAR MODELO (Backend)
+================================================================================
+
+Archivo: backend/models/modeloInventario.js
+
+>>> CAMBIO 1: En la función obtenerTodos()
+
+Busca (aproximadamente línea 4):
+    const [filas] = await poolConexion.query(
+      'SELECT * FROM inventario ORDER BY nombre_insumo'
+    );
+
+Nota: Ya usa SELECT *, por lo que NO NECESITA CAMBIOS. 
+El * incluye automáticamente todos los campos, incluyendo los nuevos.
+
+✓ POR QUÉ: El asterisco (*) devuelve todas las columnas de la tabla
+
+
+>>> CAMBIO 2: En la función crear()
+
+Busca (aproximadamente línea 19):
+    const { nombreInsumo, cantidadTotal, cantidadDisponible } = datosInsumo;
+    const [resultado] = await poolConexion.query(
+      'INSERT INTO inventario (nombre_insumo, cantidad_total, cantidad_disponible) VALUES (?, ?, ?)',
+      [nombreInsumo, cantidadTotal, cantidadDisponible]
+    );
+
+Reemplázalo por:
+    const { nombreInsumo, descripcion, cantidadTotal, cantidadDisponible, stockMinimo } = datosInsumo;
+    const [resultado] = await poolConexion.query(
+      'INSERT INTO inventario (nombre_insumo, descripcion, cantidad_total, cantidad_disponible, stock_minimo) VALUES (?, ?, ?, ?, ?)',
+      [nombreInsumo, descripcion || null, cantidadTotal, cantidadDisponible, stockMinimo || 5]
+    );
+
+✓ POR QUÉ: 
+  • Extrae descripcion y stockMinimo del objeto
+  • Inserta los nuevos campos en BD
+  • descripcion puede ser null si no se envía
+  • stockMinimo por defecto es 5 si no se envía
+  • fecha_ingreso se genera automáticamente en la BD
+
+
+>>> CAMBIO 3: En la función actualizar()
+
+Busca (aproximadamente línea 29):
+    const { nombreInsumo, cantidadTotal, cantidadDisponible } = datosInsumo;
+    const [resultado] = await poolConexion.query(
+      'UPDATE inventario SET nombre_insumo = ?, cantidad_total = ?, cantidad_disponible = ? WHERE id_inventario = ?',
+      [nombreInsumo, cantidadTotal, cantidadDisponible, idInventario]
+    );
+
+Reemplázalo por:
+    const { nombreInsumo, descripcion, cantidadTotal, cantidadDisponible, stockMinimo } = datosInsumo;
+    const [resultado] = await poolConexion.query(
+      'UPDATE inventario SET nombre_insumo = ?, descripcion = ?, cantidad_total = ?, cantidad_disponible = ?, stock_minimo = ? WHERE id_inventario = ?',
+      [nombreInsumo, descripcion, cantidadTotal, cantidadDisponible, stockMinimo, idInventario]
+    );
+
+✓ POR QUÉ: 
+  • Extrae los nuevos campos
+  • Los incluye en el UPDATE
+  • Nota: fecha_ingreso NO se actualiza (es inmutable)
+
+
+================================================================================
+3. ACTUALIZAR CONTROLADOR (Backend)
+================================================================================
+
+Archivo: backend/controllers/controladorInventario.js
+
+>>> CAMBIO 1: En la función crear()
+
+Busca (aproximadamente línea 28):
+    const { nombreInsumo, cantidadTotal, cantidadDisponible } = req.body;
+
+Reemplázalo por:
+    const { nombreInsumo, descripcion, cantidadTotal, cantidadDisponible, stockMinimo } = req.body;
+
+✓ POR QUÉ: Extrae los nuevos campos del cuerpo de la solicitud HTTP
+
+
+>>> CAMBIO 2: Dentro de la función crear(), en la validación
+
+Busca (aproximadamente línea 32):
+    if (!nombreInsumo || cantidadTotal === undefined || cantidadDisponible === undefined) {
+      return res.status(400).json({
+        exito: false,
+        mensaje: 'Todos los campos son obligatorios',
+      });
+    }
+
+Déjalo igual - descripcion y stockMinimo pueden ser opcionales. 
+Solo nombreInsumo, cantidadTotal y cantidadDisponible son obligatorios.
+
+✓ POR QUÉ: No queremos requerir forzadamente los nuevos campos
+
+
+>>> CAMBIO 3: Dentro de la función crear(), en la llamada a ModeloInventario.crear()
+
+Busca (aproximadamente línea 49):
+    await ModeloInventario.crear({ nombreInsumo, cantidadTotal, cantidadDisponible });
+
+Reemplázalo por:
+    await ModeloInventario.crear({ 
+      nombreInsumo, 
+      descripcion, 
+      cantidadTotal, 
+      cantidadDisponible, 
+      stockMinimo 
+    });
+
+✓ POR QUÉ: Pasa los nuevos campos al modelo para guardarlos en BD
+
+
+>>> CAMBIO 4: En la función actualizar()
+
+Busca (aproximadamente línea 68):
+    const { nombreInsumo, cantidadTotal, cantidadDisponible } = req.body;
+
+Reemplázalo por:
+    const { nombreInsumo, descripcion, cantidadTotal, cantidadDisponible, stockMinimo } = req.body;
+
+✓ POR QUÉ: Extrae los nuevos campos del cuerpo de la solicitud
+
+
+>>> CAMBIO 5: Dentro de la función actualizar(), en la llamada a ModeloInventario.actualizar()
+
+Busca (aproximadamente línea 85):
+    await ModeloInventario.actualizar(idInventario, {
+      nombreInsumo,
+      cantidadTotal: totalFinal,
+      cantidadDisponible: disponibleFinal
+    });
+
+Reemplázalo por:
+    await ModeloInventario.actualizar(idInventario, {
+      nombreInsumo: nombreInsumo || existente.nombre_insumo,
+      descripcion: descripcion !== undefined ? descripcion : existente.descripcion,
+      cantidadTotal: totalFinal,
+      cantidadDisponible: disponibleFinal,
+      stockMinimo: stockMinimo !== undefined ? stockMinimo : existente.stock_minimo
+    });
+
+✓ POR QUÉ: Si no se envían los nuevos campos, mantiene los valores anteriores
+
+
+================================================================================
+4. ACTUALIZAR FORMULARIO (Frontend)
+================================================================================
+
+Archivo: frontend/src/components/ModalInventario.jsx
+
+>>> CAMBIO 1: En el useState de formulario (aproximadamente línea 8)
+
+Busca:
+  const [formulario, setFormulario] = useState({
+    nombreInsumo: insumo?.nombre_insumo || '',
+    cantidadTotal: insumo?.cantidad_total || 0,
+    cantidadDisponible: insumo?.cantidad_disponible || 0,
+  });
+
+Reemplázalo por:
+  const [formulario, setFormulario] = useState({
+    nombreInsumo: insumo?.nombre_insumo || '',
+    descripcion: insumo?.descripcion || '',
+    cantidadTotal: insumo?.cantidad_total || 0,
+    cantidadDisponible: insumo?.cantidad_disponible || 0,
+    stockMinimo: insumo?.stock_minimo || 5,
+  });
+
+✓ POR QUÉ: Agrega estados para los nuevos campos en el formulario
+
+
+>>> CAMBIO 2: En la función validar() - OPCIONAL
+
+Si quieres validar que descripcion no esté vacía, busca:
+    if (!formulario.nombreInsumo.trim()) {
+      setErrorValidacion('El nombre del insumo es obligatorio');
+      return false;
+    }
+
+Y agrega después:
+    if (!formulario.descripcion.trim()) {
+      setErrorValidacion('La descripción es obligatoria');
+      return false;
+    }
+
+ó déjalo opcional (no agregues nada)
+
+✓ POR QUÉ: Depende si quieres que descripcion sea obligatoria o no
+
+
+>>> CAMBIO 3: Agregar campos de entrada en el formulario
+
+Busca el bloque de inputs (después del nombre del insumo) y agrega:
+
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Descripción</label>
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    value={formulario.descripcion}
+                    onChange={(e) => manejarCambio('descripcion', e.target.value)}
+                    placeholder="Describe el insumo (material, características, etc.)"
+                  />
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Stock Mínimo</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    min="0"
+                    value={formulario.stockMinimo}
+                    onChange={(e) => manejarCambio('stockMinimo', parseInt(e.target.value) || 5)}
+                    placeholder="Cantidad mínima recomendada"
+                  />
+                </div>
+
+✓ POR QUÉ: Muestra los campos en el formulario para que el usuario los complete
+
+
+================================================================================
+5. FLUJO COMPLETO DE REGISTRO DE INSUMO
+================================================================================
+
+1️⃣ El usuario completa el formulario en el frontend:
+   - Nombre del Insumo
+   - Descripción (NUEVO) - Opcional
+   - Cantidad Total
+   - Cantidad Disponible
+   - Stock Mínimo (NUEVO) - Opcional, por defecto 5
+
+2️⃣ El frontend envía una solicitud POST a /api/inventario con los datos
+
+3️⃣ El controlador recibe los datos y:
+   - Los valida (solo campos obligatorios)
+   - Llama al modelo para insertar en BD
+
+4️⃣ El modelo inserta todos los campos, INCLUYENDO los nuevos:
+   - descripcion (puede ser NULL)
+   - stock_minimo (por defecto 5)
+   - fecha_ingreso (generada automáticamente)
+
+5️⃣ La BD guarda el registro con los nuevos campos completos
+
+6️⃣ El insumo se registra exitosamente
+
+✓ VERIFICAR QUE FUNCIONA:
+  • Completa el formulario de nuevo insumo en el frontend
+  • Verifica en phpMyAdmin que los campos se guardaron correctamente
+  • Edita un insumo y verifica que los campos se cargan correctamente
+
+
+================================================================================
+RESUMEN DE CAMBIOS
+================================================================================
+
+ARCHIVO                                         CAMBIOS
+─────────────────────────────────────────────────────────────────────────────
+sql/vivimostodos.sql                            Agregar 3 columnas en CREATE TABLE
+backend/models/modeloInventario.js              2 cambios: crear() y actualizar()
+backend/controllers/controladorInventario.js    4 cambios: validar y pasar nuevos campos
+frontend/src/components/ModalInventario.jsx     3 cambios: estado, validación, inputs
+
+
+================================================================================
+ORDEN RECOMENDADO PARA IMPLEMENTAR
+================================================================================
+
+1. Primero: sql/vivimostodos.sql (agregar columnas en BD)
+2. Segundo: backend/models/modeloInventario.js (actualizar INSERT/UPDATE)
+3. Tercero: backend/controllers/controladorInventario.js (validar y pasar datos)
+4. Cuarto: frontend/src/components/ModalInventario.jsx (agregar formulario)
+
+Después de hacer los cambios:
+• Reinicia el servidor backend
+• Recarga la página del frontend (Ctrl+F5)
+• Prueba crear un nuevo insumo con los campos adicionales
+
+
+================================================================================
+COMANDOS SQL ÚTILES (Para verificar después)
+================================================================================
+
+Ver estructura de la tabla:
+  DESCRIBE inventario;
+
+Ver los primeros insumos registrados:
+  SELECT id_inventario, nombre_insumo, descripcion, stock_minimo, fecha_ingreso FROM inventario;
+
+Ver stock mínimo de todos los insumos:
+  SELECT nombre_insumo, cantidad_disponible, stock_minimo FROM inventario WHERE cantidad_disponible < stock_minimo;
+================================================================================
+
+
+
+================================================================================
+3. ACTUALIZAR CONTROLADOR (Backend)
+================================================================================
+
+Archivo: backend/controllers/controladorInventario.js
+
+>>> CAMBIO 1 (línea ~30): En la función crear()
+
+Busca:
+    const { nombreInsumo, cantidadTotal, cantidadDisponible } = req.body;
+
+    if (!nombreInsumo || cantidadTotal === undefined || cantidadDisponible === undefined) {
+      return res.status(400).json({
+        exito: false,
+        mensaje: 'Todos los campos son obligatorios',
+      });
+    }
+
+Reemplázalo por:
+    const { nombreInsumo, descripcion, cantidadTotal, cantidadDisponible, stockMinimo } = req.body;
+
+    if (!nombreInsumo || cantidadTotal === undefined || cantidadDisponible === undefined) {
+      return res.status(400).json({
+        exito: false,
+        mensaje: 'Todos los campos son obligatorios',
+      });
+    }
+
+    if (stockMinimo !== undefined && stockMinimo < 0) {
+      return res.status(400).json({
+        exito: false,
+        mensaje: 'El stock mínimo no puede ser negativo',
+      });
+    }
+
+✓ SIGNIFICADO:
+  • Extrae los nuevos campos del body
+  • Valida que stock_minimo no sea negativo si se envía
+  • descripcion es opcional, no lo valida como obligatorio
+
+
+>>> CAMBIO 2 (línea ~60): En la función crear(), en la llamada ModeloInventario.crear()
+
+Busca:
+    await ModeloInventario.crear({ nombreInsumo, cantidadTotal, cantidadDisponible });
+
+Reemplázalo por:
+    await ModeloInventario.crear({ 
+      nombreInsumo, 
+      descripcion, 
+      cantidadTotal, 
+      cantidadDisponible,
+      stockMinimo: stockMinimo || 5
+    });
+
+✓ SIGNIFICADO: Pasa los nuevos campos al modelo para que se guarden en BD
+
+
+>>> CAMBIO 3 (línea ~76): En la función actualizar()
+
+Busca:
+    const { nombreInsumo, cantidadTotal, cantidadDisponible } = req.body;
+
+Reemplázalo por:
+    const { nombreInsumo, descripcion, cantidadTotal, cantidadDisponible, stockMinimo } = req.body;
+
+✓ SIGNIFICADO: Extrae los nuevos campos del body de la petición
+
+
+>>> CAMBIO 4 (línea ~95): En la función actualizar(), en la llamada ModeloInventario.actualizar()
+
+Busca:
+    await ModeloInventario.actualizar(idInventario, {
+      nombreInsumo: nombreInsumo || existente.nombre_insumo,
+      cantidadTotal: totalFinal,
+      cantidadDisponible: disponibleFinal,
+    });
+
+Reemplázalo por:
+    await ModeloInventario.actualizar(idInventario, {
+      nombreInsumo: nombreInsumo || existente.nombre_insumo,
+      descripcion: descripcion !== undefined ? descripcion : existente.descripcion,
+      cantidadTotal: totalFinal,
+      cantidadDisponible: disponibleFinal,
+      stockMinimo: stockMinimo !== undefined ? stockMinimo : existente.stock_minimo,
+    });
+
+✓ SIGNIFICADO:
+  • Pasa los campos nuevos para actualizar
+  • Si no se envían, mantiene los valores anteriores
+  • stockMinimo se valida antes (línea 60)
+
+
+================================================================================
+4. ACTUALIZAR FORMULARIO (Frontend)
+================================================================================
+
+Archivo: frontend/src/components/ModalInventario.jsx
+
+>>> CAMBIO 1 (línea ~6): En el estado inicial del formulario
+
+Busca:
+  const [formulario, setFormulario] = useState({
+    nombreInsumo: insumo?.nombre_insumo || '',
+    cantidadTotal: insumo?.cantidad_total || 0,
+    cantidadDisponible: insumo?.cantidad_disponible || 0,
+  });
+
+Reemplázalo por:
+  const [formulario, setFormulario] = useState({
+    nombreInsumo: insumo?.nombre_insumo || '',
+    descripcion: insumo?.descripcion || '',
+    cantidadTotal: insumo?.cantidad_total || 0,
+    cantidadDisponible: insumo?.cantidad_disponible || 0,
+    stockMinimo: insumo?.stock_minimo || 5,
+  });
+
+✓ SIGNIFICADO:
+  • Agraga los nuevos campos al estado del formulario
+  • Si es edición, carga los valores actuales
+  • Si es creación, deja vacío descripcion y stockMinimo en 5
+
+
+>>> CAMBIO 2 (línea ~31): En la función validar()
+
+Busca:
+  const validar = () => {
+    if (!formulario.nombreInsumo.trim()) {
+      setErrorValidacion('El nombre del insumo es obligatorio');
+      return false;
+    }
+    if (formulario.cantidadTotal < 0 || formulario.cantidadDisponible < 0) {
+      setErrorValidacion('Las cantidades no pueden ser negativas');
+      return false;
+    }
+    if (formulario.cantidadDisponible > formulario.cantidadTotal) {
+      setErrorValidacion('La cantidad disponible no puede ser mayor que la total');
+      return false;
+    }
+    return true;
+  };
+
+Reemplázalo por:
+  const validar = () => {
+    if (!formulario.nombreInsumo.trim()) {
+      setErrorValidacion('El nombre del insumo es obligatorio');
+      return false;
+    }
+    if (formulario.cantidadTotal < 0 || formulario.cantidadDisponible < 0 || formulario.stockMinimo < 0) {
+      setErrorValidacion('Las cantidades no pueden ser negativas');
+      return false;
+    }
+    if (formulario.cantidadDisponible > formulario.cantidadTotal) {
+      setErrorValidacion('La cantidad disponible no puede ser mayor que la total');
+      return false;
+    }
+    return true;
+  };
+
+✓ SIGNIFICADO:
+  • Agrega validación para que stockMinimo no sea negativo
+
+
+>>> CAMBIO 3 (línea ~58 aprox): En la sección de inputs del formulario
+
+Localiza este bloque (después del input "Nombre del Insumo"):
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Nombre del Insumo</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={formulario.nombreInsumo}
+                    onChange={(e) => manejarCambio('nombreInsumo', e.target.value)}
+                    placeholder="Ej: Sillas plegables"
+                    required
+                  />
+                </div>
+
+Y agrega esto DESPUÉS de ese bloque:
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Descripción</label>
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    value={formulario.descripcion}
+                    onChange={(e) => manejarCambio('descripcion', e.target.value)}
+                    placeholder="Detalles sobre el insumo (uso, color, tamaño, etc.)"
+                  />
+                </div>
+
+✓ SIGNIFICADO:
+  • Crea un input textarea para la descripción (permite múltiples líneas)
+  • Es opcional (sin required)
+
+
+>>> CAMBIO 4 (línea ~75 aprox): En los inputs de cantidad
+
+Localiza este bloque (después de "Cantidad Total" y "Cantidad Disponible"):
+                <div className="row g-3">
+                  <div className="col-6">
+                    <label className="form-label small fw-medium">Cantidad Total</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      ...
+                    />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label small fw-medium">Cantidad Disponible</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      ...
+                    />
+                  </div>
+                </div>
+
+Y agrega esto DESPUÉS:
+                <div className="mb-3">
+                  <label className="form-label small fw-medium">Stock Mínimo</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={formulario.stockMinimo}
+                    onChange={(e) => manejarCambio('stockMinimo', Number(e.target.value))}
+                    placeholder="Ej: 5"
+                    min="0"
+                  />
+                  <small className="text-muted d-block mt-1">Se usa para alertas cuando el stock es bajo</small>
+                </div>
+
+✓ SIGNIFICADO:
+  • Crea un input número para stock mínimo
+  • type="number" es para números
+  • min="0" previene números negativos
+  • La pequeña descripción explica para qué sirve
+
+
+================================================================================
+5. ACTUALIZAR TABLA DE VISUALIZACIÓN (Frontend - Opcional)
+================================================================================
+
+Archivo: frontend/src/pages/PaginaInventario.jsx
+
+Si deseas mostrar los nuevos campos en la tabla, agrega columnas en el <thead>:
+
+>>> En el <tr> de encabezados:
+
+Busca algo como:
+              <tr>
+                <th className="small fw-semibold text-muted">ID</th>
+                <th className="small fw-semibold text-muted">Insumo</th>
+                <th className="small fw-semibold text-muted">Cantidad Total</th>
+                <th className="small fw-semibold text-muted">Disponible</th>
+                <th className="small fw-semibold text-muted">Acciones</th>
+              </tr>
+
+Agrega estas columnas después de "Insumo":
+                <th className="small fw-semibold text-muted d-none d-md-table-cell">Descripción</th>
+                <th className="small fw-semibold text-muted d-none d-lg-table-cell">Stock Mín.</th>
+                <th className="small fw-semibold text-muted d-none d-lg-table-cell">Fecha Ingreso</th>
+
+Y agrega estos datos en el <tbody> de cada fila (después de {i.nombre_insumo}):
+                <td className="d-none d-md-table-cell small text-muted">{i.descripcion || '-'}</td>
+                <td className="d-none d-lg-table-cell">{i.stock_minimo}</td>
+                <td className="d-none d-lg-table-cell small">
+                  {i.fecha_ingreso ? new Date(i.fecha_ingreso).toLocaleDateString('es-ES') : '-'}
+                </td>
+
+✓ SIGNIFICADO:
+  • d-none d-md-table-cell = oculto en móvil, visible en tablet+
+  • d-none d-lg-table-cell = oculto en móvil y tablet, visible en desktop
+  • new Date().toLocaleDateString('es-ES') = formatea fecha al formato español
+
+
+================================================================================
+RESUMEN DE CAMBIOS
+================================================================================
+
+ARCHIVO                                      CAMBIOS
+─────────────────────────────────────────────────────────────────────────────
+sql/vivimostodos.sql                         4 líneas: Agregar columnas (descripcion, stock_minimo, fecha_ingreso)
+backend/models/modeloInventario.js           3 cambios: Actualizar función crear() y actualizar()
+backend/controllers/controladorInventario.js 4 cambios: Validar y pasar nuevos campos
+frontend/src/components/ModalInventario.jsx  4 cambios: Agregar campos al estado, validación y formulario
+frontend/src/pages/PaginaInventario.jsx      Opcional: Mostrar columnas en tabla
+
+
+================================================================================
+ORDEN RECOMENDADO PARA IMPLEMENTAR
+================================================================================
+
+1. Primero: sql/vivimostodos.sql (agregar columnas en BD)
+2. Segundo: backend/models/modeloInventario.js (actualizar queries)
+3. Tercero: backend/controllers/controladorInventario.js (validar y pasar datos)
+4. Cuarto: frontend/src/components/ModalInventario.jsx (agregar formulario)
+5. Quinto (Opcional): frontend/src/pages/PaginaInventario.jsx (mostrar en tabla)
+
+Después de hacer los cambios:
+• Reinicia el servidor backend
+• Recarga la página del frontend (Ctrl+F5)
+• Prueba crear un nuevo insumo con los campos adicionales
+
+
+================================================================================
+TIPOS DE DATOS UTILIZADOS
+================================================================================
+
+✓ stock_minimo (INT) → Número entero para cantidad mínima
+✓ descripcion (VARCHAR 500) → Texto largo para detalles del insumo
+✓ fecha_ingreso (DATETIME) → Fecha y hora, se genera automáticamente
+
+
+================================================================================
+NOTAS IMPORTANTES
+================================================================================
+
+✓ descripcion es OPCIONAL - puede quedar vacía
+✓ stock_minimo tiene valor por defecto 5
+✓ fecha_ingreso se genera automáticamente - NO se actualiza
+✓ Usa phpMyAdmin para ejecutar los ALTER TABLE si tienes datos existentes
+✓ En la tabla, fecha_ingreso solo es visible en pantallas grandes (d-lg)
+✓ El campo stock_minimo es perfecto para futuras alertas de inventario bajo
+
+================================================================================
+EJEMPLO DE DATOS
+
+Cuando crees un nuevo insumo:
+- Nombre: "Sillas plegables"
+- Descripción: "Sillas color blanco, resistentes, para exterior"
+- Cantidad Total: 30
+- Cantidad Disponible: 25
+- Stock Mínimo: 10
+- Fecha Ingreso: Se genera automáticamente (2026-04-21 14:30:00)
+
+================================================================================
