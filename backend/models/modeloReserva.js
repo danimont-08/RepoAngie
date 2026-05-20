@@ -30,6 +30,14 @@ class ModeloReserva {
     return filas;
   }
 
+  static async obtenerPorId(idReserva) {
+    const [filas] = await poolConexion.query(
+      'SELECT * FROM reservas WHERE id_reserva = ?',
+      [idReserva]
+    );
+    return filas[0] || null;
+  }
+
   static async obtenerPorUsuario(idApartamento) {
     const [filas] = await poolConexion.query(`
       SELECT * FROM reservas

@@ -1,5 +1,6 @@
 const ModeloPrestamo  = require('../models/modeloPrestamo');
 const ModeloReserva   = require('../models/modeloReserva');
+const ModeloNotificacion = require('../models/modeloNotificacion');
 const { poolConexion } = require('../config/baseDatos');
 
 const controladorPrestamos = {
@@ -86,6 +87,34 @@ const controladorPrestamos = {
       const mensajeRespuesta = resultado.actualizado
         ? 'Solicitud actualizada correctamente. La cantidad ha sido reemplazada.'
         : 'Préstamo creado correctamente. El inventario ha sido actualizado.';
+
+      // Alertas inteligentes de préstamo e inventario
+      try {
+        const [[insumoInfo]] = await poolConexion.query(
+          'SELECT nombre_insumo, cantidad_disponible FROM inventario WHERE id_inventario = ?',
+          [id_inventario]
+        );
+
+        if (insumoInfo) {
+          // 1. Notificar al residente
+          await ModeloNotificacion.crear({
+            idApartamento: id_apartamento,
+            titulo: 'Insumo Prestado',
+            mensaje: `Se ha registrado el préstamo de ${cantidad} unidad(es) de "${insumoInfo.nombre_insumo}".`
+          });
+
+          // 2. Alerta de stock agotado para admin/supervisor
+          if (insumoInfo.cantidad_disponible === 0) {
+            await ModeloNotificacion.crear({
+              idApartamento: null,
+              titulo: 'Alerta: Insumo Agotado',
+              mensaje: `El insumo "${insumoInfo.nombre_insumo}" se ha agotado en el inventario.`
+            });
+          }
+        }
+      } catch (errNotif) {
+        console.error('Error al generar notificaciones de préstamo:', errNotif);
+      }
 
       res.status(201).json({
         exito:      true,

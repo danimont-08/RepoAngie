@@ -1,4 +1,5 @@
 const ModeloReserva = require('../models/modeloReserva');
+const ModeloNotificacion = require('../models/modeloNotificacion');
 
 const controladorReservas = {
   obtenerTodas: async (req, res) => {
@@ -83,6 +84,13 @@ const controladorReservas = {
         fechaReserva: fecha_reserva
       });
 
+      // Alerta inteligente: Notificar a los administradores
+      await ModeloNotificacion.crear({
+        idApartamento: null,
+        titulo: 'Nueva Reserva Pendiente',
+        mensaje: `El apartamento ${id_apartamento} ha solicitado una reserva para el ${fecha_reserva}.`
+      });
+
       res.status(201).json({ 
         exito: true, 
         mensaje: 'Reserva creada exitosamente. Queda pendiente de aprobación por el administrador.',
@@ -122,7 +130,18 @@ const controladorReservas = {
   aprobar: async (req, res) => {
     try {
       const { id } = req.params;
+      const reserva = await ModeloReserva.obtenerPorId(id);
+      
       await ModeloReserva.aprobar(id);
+      
+      if (reserva) {
+        await ModeloNotificacion.crear({
+          idApartamento: reserva.id_apartamento,
+          titulo: 'Reserva Aprobada',
+          mensaje: `¡Tu reserva del salón social para la fecha ${reserva.fecha_reserva} ha sido APROBADA!`
+        });
+      }
+      
       res.json({ exito: true, mensaje: 'Reserva aprobada correctamente' });
     } catch (error) {
       console.error('Error al aprobar reserva:', error);
@@ -136,7 +155,18 @@ const controladorReservas = {
   rechazar: async (req, res) => {
     try {
       const { id } = req.params;
+      const reserva = await ModeloReserva.obtenerPorId(id);
+      
       await ModeloReserva.rechazar(id);
+      
+      if (reserva) {
+        await ModeloNotificacion.crear({
+          idApartamento: reserva.id_apartamento,
+          titulo: 'Reserva Rechazada',
+          mensaje: `Tu reserva del salón social para la fecha ${reserva.fecha_reserva} ha sido RECHAZADA.`
+        });
+      }
+      
       res.json({ exito: true, mensaje: 'Reserva rechazada correctamente' });
     } catch (error) {
       console.error('Error al rechazar reserva:', error);

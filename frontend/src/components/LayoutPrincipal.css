@@ -42,3 +42,51 @@
     z-index: 1040;
   }
 }
+
+/* --- Estilos del Centro de Notificaciones --- */
+.bandeja-notificaciones {
+  width: 330px;
+  max-height: 400px;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bg-light-alert {
+  background-color: rgba(13, 110, 253, 0.06);
+}
+
+.bg-light-alert:hover {
+  background-color: rgba(13, 110, 253, 0.09);
+}
+
+.small-btn {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+@keyframes ring {
+  0% { transform: rotate(0); }
+  10% { transform: rotate(15deg); }
+  20% { transform: rotate(-10deg); }
+  30% { transform: rotate(8deg); }
+  40% { transform: rotate(-6deg); }
+  50% { transform: rotate(4deg); }
+  60% { transform: rotate(-2deg); }
+  70% { transform: rotate(1deg); }
+  100% { transform: rotate(0); }
+}
+
+.animate-bell {
+  display: inline-block;
+  animation: ring 2s ease infinite;
+  transform-origin: 50% 0;
+}

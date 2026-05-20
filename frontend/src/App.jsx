@@ -6,9 +6,10 @@ import PaginaUsuarios from './pages/PaginaUsuarios';
 import PaginaInventario from './pages/PaginaInventario';
 import PaginaReservas from './pages/PaginaReservas';
 import PaginaMisPrestamos from './pages/PaginaMisPrestamos';
+import PaginaReportes from './pages/PaginaReportes';
 import LayoutPrincipal from './components/LayoutPrincipal';
 
-function RutaProtegida({ children, soloAdmin = false, soloNoSupervisor = false, soloResidente = false }) {
+function RutaProtegida({ children, soloAdmin = false, soloNoSupervisor = false, soloResidente = false, soloPersonal = false }) {
   const { usuario, cargando, esAdmin, esSupervisor } = useAuth();
 
   if (cargando) {
@@ -23,6 +24,7 @@ function RutaProtegida({ children, soloAdmin = false, soloNoSupervisor = false, 
 
   if (!usuario) return <Navigate to="/login" replace />;
   if (soloAdmin && !esAdmin) return <Navigate to="/dashboard" replace />;
+  if (soloPersonal && !esAdmin && !esSupervisor) return <Navigate to="/dashboard" replace />;
   // soloNoSupervisor: solo admin y residentes acceden, supervisor va al dashboard
   if (soloNoSupervisor && esSupervisor) return <Navigate to="/dashboard" replace />;
   // soloResidente: solo residentes; admin y supervisor van al dashboard
@@ -54,6 +56,8 @@ export default function App() {
       <Route path="/reservas" element={<RutaProtegida soloNoSupervisor><PaginaReservas /></RutaProtegida>} />
       {/* Mis Préstamos: solo residentes */}
       <Route path="/mis-prestamos" element={<RutaProtegida soloResidente><PaginaMisPrestamos /></RutaProtegida>} />
+      {/* Reportes: administradores y supervisores */}
+      <Route path="/reportes" element={<RutaProtegida soloPersonal><PaginaReportes /></RutaProtegida>} />
       <Route path="/" element={<Navigate to={usuario ? '/dashboard' : '/login'} replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -20,6 +20,21 @@ const verificarConexion = async () => {
   try {
     const conexion = await poolConexion.getConnection();
     console.log('✅ Conexión a MySQL establecida correctamente');
+    
+    // Crear tabla de notificaciones si no existe
+    await conexion.query(`
+      CREATE TABLE IF NOT EXISTS notificaciones (
+        id_notificacion INT AUTO_INCREMENT PRIMARY KEY,
+        id_apartamento INT NULL,
+        titulo VARCHAR(150) NOT NULL,
+        mensaje TEXT NOT NULL,
+        leido TINYINT(1) DEFAULT 0,
+        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (id_apartamento) REFERENCES usuarios(id_apartamento) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    console.log('🔔 Tabla notificaciones verificada/creada correctamente');
+    
     conexion.release();
   } catch (error) {
     console.error('❌ Error al conectar con MySQL:', error.message);

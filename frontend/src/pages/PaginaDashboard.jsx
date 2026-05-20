@@ -23,8 +23,14 @@ const formatearFechaSegura = (strFecha, opciones) => {
 /* ──────────────────── DASHBOARD ADMINISTRADOR ──────────────────── */
 function DashboardAdmin({ usuario }) {
   const [estadisticas, setEstadisticas] = useState(null);
-  const [reservasPendientes, setReservasPendientes] = useState([]);
+  const [todasLasReservas, setTodasLasReservas] = useState([]);
   const [cargando, setCargando] = useState(true);
+
+  // Filtros
+  const [filtroMes, setFiltroMes] = useState('todos');
+  const [filtroAnio, setFiltroAnio] = useState(new Date().getFullYear().toString());
+  const [filtroApt, setFiltroApt] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('todos');
 
   useEffect(() => {
     const cargar = async () => {
@@ -38,8 +44,7 @@ function DashboardAdmin({ usuario }) {
           ...respUsuarios.data.datos,
           ...respInventario.data.datos,
         });
-        const todas = respReservas.data.datos || [];
-        setReservasPendientes(todas.filter(r => r.estado === 'activa'));
+        setTodasLasReservas(respReservas.data.datos || []);
       } catch (error) {
         console.error('Error cargando estadísticas admin:', error);
       } finally {
@@ -63,13 +68,190 @@ function DashboardAdmin({ usuario }) {
     { titulo: 'Total Insumos', valor: estadisticas.totalInsumos, icono: 'bi-box-seam', colorFondo: 'bg-info bg-opacity-10', colorIcono: 'text-info' },
   ] : [];
 
+  // Filtrado de reservas
+  const reservasFiltradas = todasLasReservas.filter(res => {
+    if (!res.fecha_reserva) return false;
+    const partes = String(res.fecha_reserva).split('-'); // "YYYY-MM-DD"
+    const mesVal = parseInt(partes[1]).toString(); // '5' en lugar de '05'
+    const anioVal = partes[0];
+    
+    const coincideMes = filtroMes === 'todos' || mesVal === filtroMes;
+    const coincideAnio = filtroAnio === 'todos' || anioVal === filtroAnio;
+    const coincideApt = !filtroApt || res.id_apartamento.toString().includes(filtroApt);
+    const coincideEstado = filtroEstado === 'todos' || res.estado === filtroEstado;
+    
+    return coincideMes && coincideAnio && coincideApt && coincideEstado;
+  });
+
+  // Reservas pendientes reales (sin filtrar)
+  const reservasPendientes = todasLasReservas.filter(r => r.estado === 'activa');
+
+  // Próximas reservas ordenadas para el semáforo (futuras y que sean activas o aprobadas)
+  const hoyStr = new Date().toISOString().split('T')[0];
+  const proximasReservas = todasLasReservas
+    .filter(r => r.fecha_reserva >= hoyStr && (r.estado === 'activa' || r.estado === 'aprobada'))
+    .sort((a, b) => a.fecha_reserva.localeCompare(b.fecha_reserva));
+
+  const calcularSemaforo = (fechaStr, estado) => {
+    const ahora = new Date();
+    ahora.setHours(0, 0, 0, 0);
+    
+    const fechaRes = new Date(fechaStr + 'T00:00:00');
+    fechaRes.setHours(0, 0, 0, 0);
+    
+    const diffMs = fechaRes.getTime() - ahora.getTime();
+    const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDias < 0) {
+      return { color: '#6c757d', badge: 'bg-secondary bg-opacity-10 text-secondary', texto: 'Pasada', dias: diffDias };
+    } else if (diffDias <= 1) {
+      return { color: '#dc3545', badge: 'bg-danger bg-opacity-10 text-danger', texto: 'Urgente (Hoy/Mañana)', dias: diffDias, urgente: true };
+    } else if (diffDias <= 3) {
+      return { color: '#ffc107', badge: 'bg-warning bg-opacity-10 text-warning', texto: 'Próxima (2-3 días)', dias: diffDias };
+    } else {
+      return { color: '#198754', badge: 'bg-success bg-opacity-10 text-success', texto: 'A tiempo (>3 días)', dias: diffDias };
+    }
+  };
+
+  // Renderizador de gráfico de barras SVG
+  const renderBarChart = () => {
+    const total = reservasFiltradas.length;
+    if (total === 0) {
+      return <div className="text-center py-5 text-muted small">No hay reservas para mostrar con los filtros actuales.</div>;
+    }
+
+    let labels = [];
+    let counts = [];
+
+    if (filtroMes === 'todos') {
+      labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      counts = Array(12).fill(0);
+      reservasFiltradas.forEach(r => {
+        const mes = parseInt(String(r.fecha_reserva).split('-')[1]) - 1;
+        if (mes >= 0 && mes < 12) counts[mes]++;
+      });
+    } else {
+      labels = ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4+'];
+      counts = Array(4).fill(0);
+      reservasFiltradas.forEach(r => {
+        const dia = parseInt(String(r.fecha_reserva).split('-')[2]);
+        if (dia <= 7) counts[0]++;
+        else if (dia <= 14) counts[1]++;
+        else if (dia <= 21) counts[2]++;
+        else counts[3]++;
+      });
+    }
+
+    const maxVal = Math.max(...counts, 1);
+    const chartHeight = 130;
+
+    return (
+      <div className="w-100">
+        <div className="d-flex align-items-end gap-2 px-2 pb-2 border-bottom shadow-inner" style={{ height: `${chartHeight}px` }}>
+          {counts.map((val, idx) => {
+            const pct = val / maxVal;
+            const barHeight = Math.max(pct * (chartHeight - 15), val > 0 ? 8 : 0);
+            
+            return (
+              <div key={idx} className="flex-grow-1 d-flex flex-column align-items-center position-relative group-bar">
+                {val > 0 && (
+                  <div className="bar-tooltip bg-dark text-white rounded px-2 py-1 text-center position-absolute" style={{ fontSize: '10px', top: '-30px', display: 'none', zIndex: 10, whiteSpace: 'nowrap' }}>
+                    {val} {val === 1 ? 'reserva' : 'reservas'}
+                  </div>
+                )}
+                <div 
+                  className="bg-primary rounded-top bar-item w-100" 
+                  style={{ 
+                    height: `${barHeight}px`, 
+                    transition: 'height 0.4s ease',
+                    backgroundColor: val > 0 ? '#0d6efd' : '#e9ecef',
+                    cursor: val > 0 ? 'pointer' : 'default'
+                  }}
+                ></div>
+                <span className="text-muted mt-2 text-truncate w-100 text-center" style={{ fontSize: '10px' }}>{labels[idx]}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // Renderizador de gráfico Donut SVG
+  const renderDonutChart = () => {
+    const total = reservasFiltradas.length;
+    if (total === 0) {
+      return <div className="text-center py-5 text-muted small">Sin estadísticas de distribución.</div>;
+    }
+
+    const estados = {
+      aprobada: reservasFiltradas.filter(r => r.estado === 'aprobada' || r.estado === 'completada').length,
+      activa: reservasFiltradas.filter(r => r.estado === 'activa').length,
+      cancelada: reservasFiltradas.filter(r => r.estado === 'cancelada' || r.estado === 'rechazada').length,
+    };
+
+    const data = [
+      { label: 'Aprobadas', count: estados.aprobada, color: '#198754' },
+      { label: 'Pendientes', count: estados.activa, color: '#ffc107' },
+      { label: 'Canceladas/Rech.', count: estados.cancelada, color: '#dc3545' },
+    ].filter(d => d.count > 0);
+
+    if (data.length === 0) {
+      return <div className="text-center py-5 text-muted small">Sin datos disponibles.</div>;
+    }
+
+    let acumulado = 0;
+    const radio = 38;
+    const circ = 2 * Math.PI * radio; // ~238.76
+
+    return (
+      <div className="d-flex flex-column align-items-center justify-content-center h-100">
+        <div className="d-flex align-items-center gap-3">
+          <svg width="110" height="110" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r={radio} fill="transparent" stroke="#f0f0f0" strokeWidth="8" />
+            {data.map((item, index) => {
+              const porcentaje = item.count / total;
+              const strokeLength = porcentaje * circ;
+              const strokeOffset = circ - (acumulado * circ) + (circ * 0.25);
+              acumulado += porcentaje;
+              
+              return (
+                <circle
+                  key={index}
+                  cx="50"
+                  cy="50"
+                  r={radio}
+                  fill="transparent"
+                  stroke={item.color}
+                  strokeWidth="8"
+                  strokeDasharray={`${strokeLength} ${circ - strokeLength}`}
+                  strokeDashoffset={strokeOffset}
+                  style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+                />
+              );
+            })}
+            <text x="50" y="55" textAnchor="middle" className="fw-bold" style={{ fontSize: '13px', fill: '#333' }}>
+              {total}
+            </text>
+          </svg>
+          <div>
+            {data.map((item, index) => (
+              <div key={index} className="d-flex align-items-center gap-2 mb-1">
+                <span style={{ display: 'inline-block', width: 9, height: 9, backgroundColor: item.color, borderRadius: '50%' }}></span>
+                <span className="small text-dark" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  {item.label}: <strong>{item.count}</strong>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
-      <div className="mb-4">
-        <h3 className="fw-bold">{obtenerSaludo()}, {usuario?.nombreTitular?.split(' ')[0]}</h3>
-        <p className="text-muted mb-0">Panel de Administración del Salón Social</p>
-      </div>
-
+      {/* Las estadísticas globales */}
       {cargando ? (
         <div className="row g-3 mb-4">
           {[1, 2, 3, 4].map(i => (
@@ -87,7 +269,7 @@ function DashboardAdmin({ usuario }) {
         <div className="row g-3 mb-4">
           {tarjetas.map(t => (
             <div key={t.titulo} className="col-sm-6 col-xl-3">
-              <div className="card tarjeta-estadistica shadow-sm">
+              <div className="card tarjeta-estadistica shadow-sm border-0">
                 <div className="card-body">
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <span className="small fw-medium text-muted">{t.titulo}</span>
@@ -95,7 +277,7 @@ function DashboardAdmin({ usuario }) {
                       <i className={`bi ${t.icono} ${t.colorIcono}`}></i>
                     </div>
                   </div>
-                  <h3 className="fw-bold mb-0">{t.valor}</h3>
+                  <h3 className="fw-bold mb-0 text-dark">{t.valor}</h3>
                 </div>
               </div>
             </div>
@@ -103,8 +285,133 @@ function DashboardAdmin({ usuario }) {
         </div>
       )}
 
-      <div className="row g-3">
-        {/* Reservas pendientes */}
+      {/* --- PANEL DE FILTROS PARA LAS GRÁFICAS (PUNTO 11) --- */}
+      <div className="card shadow-sm border-0 mb-4">
+        <div className="card-body">
+          <h6 className="fw-bold mb-3 d-flex align-items-center gap-2 text-dark">
+            <i className="bi bi-funnel text-primary"></i> Bitácora e Interactividad de Gráficas
+          </h6>
+          <div className="row g-2">
+            <div className="col-sm-3">
+              <label className="form-label small text-muted mb-1">Año</label>
+              <select className="form-select form-select-sm" value={filtroAnio} onChange={e => setFiltroAnio(e.target.value)}>
+                <option value="todos">Todos</option>
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+            <div className="col-sm-3">
+              <label className="form-label small text-muted mb-1">Mes</label>
+              <select className="form-select form-select-sm" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}>
+                <option value="todos">Todos los meses</option>
+                <option value="1">Enero</option>
+                <option value="2">Febrero</option>
+                <option value="3">Marzo</option>
+                <option value="4">Abril</option>
+                <option value="5">Mayo</option>
+                <option value="6">Junio</option>
+                <option value="7">Julio</option>
+                <option value="8">Agosto</option>
+                <option value="9">Septiembre</option>
+                <option value="10">Octubre</option>
+                <option value="11">Noviembre</option>
+                <option value="12">Diciembre</option>
+              </select>
+            </div>
+            <div className="col-sm-3">
+              <label className="form-label small text-muted mb-1">Apartamento</label>
+              <input 
+                type="text" 
+                className="form-control form-control-sm" 
+                placeholder="Filtro rápido Apt" 
+                value={filtroApt} 
+                onChange={e => setFiltroApt(e.target.value)} 
+              />
+            </div>
+            <div className="col-sm-3">
+              <label className="form-label small text-muted mb-1">Estado</label>
+              <select className="form-select form-select-sm" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
+                <option value="todos">Todos</option>
+                <option value="activa">Pendientes</option>
+                <option value="aprobada">Aprobadas</option>
+                <option value="cancelada">Canceladas</option>
+                <option value="rechazada">Rechazadas</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* --- GRÁFICAS INTERACTIVAS (PUNTO 11) --- */}
+      <div className="row g-3 mb-4">
+        {/* Gráfico de Barras */}
+        <div className="col-lg-7">
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-body d-flex flex-column justify-content-between">
+              <h6 className="fw-semibold text-dark mb-3">Reservas en el Tiempo (Año / Semana)</h6>
+              <div className="flex-grow-1 d-flex align-items-center">
+                {renderBarChart()}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Gráfico de Donut */}
+        <div className="col-lg-5">
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-body">
+              <h6 className="fw-semibold text-dark mb-3">Distribución por Estado</h6>
+              {renderDonutChart()}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="row g-3 mb-4">
+        {/* --- SEMÁFORO DE PRÓXIMAS RESERVAS (PUNTO 10) --- */}
+        <div className="col-lg-6">
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-body">
+              <div className="d-flex align-items-center gap-2 mb-3">
+                <div className="rounded-3 p-2 bg-danger bg-opacity-10">
+                  <i className="bi bi-clock-history text-danger animate-pulse"></i>
+                </div>
+                <h6 className="fw-semibold mb-0 text-dark">Semáforo de Próximas Reservas</h6>
+              </div>
+              {cargando ? (
+                <div className="text-center py-4"><div className="spinner-border spinner-border-sm text-danger"></div></div>
+              ) : proximasReservas.length === 0 ? (
+                <p className="text-muted small mb-0">No hay próximas reservas programadas.</p>
+              ) : (
+                <div className="list-group list-group-flush">
+                  {proximasReservas.slice(0, 5).map(r => {
+                    const sem = calcularSemaforo(r.fecha_reserva, r.estado);
+                    return (
+                      <div key={r.id_reserva} className="list-group-item px-0 py-2 d-flex justify-content-between align-items-center bg-transparent">
+                        <div>
+                          <div className="small fw-semibold text-dark">{r.nombre_titular} · Apt {r.id_apartamento}</div>
+                          <div className="small text-muted">{formatearFechaSegura(r.fecha_reserva, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                        </div>
+                        <div className="text-end d-flex flex-column align-items-end">
+                          <span className={`badge ${sem.badge} d-inline-flex align-items-center gap-1`}>
+                            <span className={`dot-semaforo ${sem.urgente ? 'dot-semaforo-urgente' : ''}`} style={{ width: 8, height: 8, backgroundColor: sem.color, borderRadius: '50%' }}></span>
+                            {sem.texto}
+                          </span>
+                          <span className="text-muted small mt-1" style={{ fontSize: '10px' }}>
+                            {r.estado === 'activa' ? 'Pendiente aprobación' : 'Aprobada'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Reservas pendientes de aprobación */}
         <div className="col-lg-6">
           <div className="card shadow-sm border-0 h-100">
             <div className="card-body">
@@ -112,16 +419,18 @@ function DashboardAdmin({ usuario }) {
                 <div className="rounded-3 p-2 bg-warning bg-opacity-10">
                   <i className="bi bi-calendar-check text-warning"></i>
                 </div>
-                <h6 className="fw-semibold mb-0">Reservas Pendientes de Aprobación</h6>
+                <h6 className="fw-semibold mb-0 text-dark">Reservas Pendientes de Aprobación</h6>
               </div>
-              {reservasPendientes.length === 0 ? (
+              {cargando ? (
+                <div className="text-center py-4"><div className="spinner-border spinner-border-sm text-warning"></div></div>
+              ) : reservasPendientes.length === 0 ? (
                 <p className="text-muted small mb-0">No hay reservas pendientes.</p>
               ) : (
                 <div className="list-group list-group-flush">
                   {reservasPendientes.slice(0, 5).map(r => (
-                    <div key={r.id_reserva} className="list-group-item px-0 py-2 d-flex justify-content-between align-items-center">
+                    <div key={r.id_reserva} className="list-group-item px-0 py-2 d-flex justify-content-between align-items-center bg-transparent">
                       <div>
-                        <div className="small fw-semibold">{r.nombre_titular} · Apt {r.id_apartamento}</div>
+                        <div className="small fw-semibold text-dark">{r.nombre_titular} · Apt {r.id_apartamento}</div>
                         <div className="small text-muted">{formatearFechaSegura(r.fecha_reserva, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
                       </div>
                       <span className="badge bg-warning bg-opacity-10 text-warning">Pendiente</span>
@@ -137,28 +446,32 @@ function DashboardAdmin({ usuario }) {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Acceso rápido */}
-        <div className="col-lg-6">
-          <div className="card shadow-sm border-0 h-100">
-            <div className="card-body">
-              <div className="d-flex align-items-center gap-2 mb-3">
-                <div className="rounded-3 p-2 bg-success bg-opacity-10">
-                  <i className="bi bi-lightning text-success"></i>
-                </div>
-                <h6 className="fw-semibold mb-0">Acceso Rápido</h6>
-              </div>
-              <div className="d-grid gap-2">
-                <Link to="/usuarios" className="btn btn-outline-primary d-flex align-items-center gap-2">
-                  <i className="bi bi-people"></i> Gestionar Usuarios
-                </Link>
-                <Link to="/inventario" className="btn btn-outline-info d-flex align-items-center gap-2">
-                  <i className="bi bi-box-seam"></i> Ver Inventario
-                </Link>
-                <Link to="/reservas" className="btn btn-outline-warning d-flex align-items-center gap-2">
-                  <i className="bi bi-calendar-event"></i> Aprobar / Rechazar Reservas
-                </Link>
-              </div>
+      {/* Acceso rápido */}
+      <div className="card shadow-sm border-0 mb-2">
+        <div className="card-body">
+          <div className="d-flex align-items-center gap-2 mb-3">
+            <div className="rounded-3 p-2 bg-success bg-opacity-10">
+              <i className="bi bi-lightning text-success"></i>
+            </div>
+            <h6 className="fw-semibold mb-0 text-dark">Acceso Rápido Administrativo</h6>
+          </div>
+          <div className="row g-2">
+            <div className="col-md-4">
+              <Link to="/usuarios" className="btn btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-2 py-2 small fw-medium">
+                <i className="bi bi-people"></i> Gestionar Usuarios
+              </Link>
+            </div>
+            <div className="col-md-4">
+              <Link to="/inventario" className="btn btn-outline-info w-100 d-flex align-items-center justify-content-center gap-2 py-2 small fw-medium">
+                <i className="bi bi-box-seam"></i> Ver Inventario
+              </Link>
+            </div>
+            <div className="col-md-4">
+              <Link to="/reportes" className="btn btn-outline-success w-100 d-flex align-items-center justify-content-center gap-2 py-2 small fw-medium">
+                <i className="bi bi-file-earmark-bar-graph"></i> Descargar Reportes
+              </Link>
             </div>
           </div>
         </div>
