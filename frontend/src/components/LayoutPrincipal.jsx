@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/ContextoAutenticacion';
 import { servicioNotificaciones } from '../services/servicioNotificaciones';
 import './LayoutPrincipal.css';
@@ -10,7 +10,7 @@ const reproducirSonidoNotificacion = () => {
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
     
-    // Tono 1: Agudo y limpio (D5 -> A5)
+    
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'sine';
@@ -23,7 +23,7 @@ const reproducirSonidoNotificacion = () => {
     osc1.connect(gain1);
     gain1.connect(ctx.destination);
     
-    // Tono 2: Armónico de soporte (A5 -> D6)
+    
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = 'triangle';
@@ -45,9 +45,17 @@ const reproducirSonidoNotificacion = () => {
   }
 };
 
+// OBTENER URL SEGÚN TIPO NOTIFICACIÓN
+const obtenerUrlNotificacion = (titulo) => {
+  if (titulo.includes('Reserva')) return '/reservas';
+  if (titulo.includes('Insumo') || titulo.includes('Agotado')) return '/inventario';
+  return null;
+};
+
 export default function LayoutPrincipal({ children }) {
   const { usuario, cerrarSesion, esAdmin, esSupervisor } = useAuth();
   const ubicacion = useLocation();
+  const navegar = useNavigate();
   const [menuAbierto, setMenuAbierto] = useState(false);
   
   // Estados para notificaciones
@@ -91,6 +99,21 @@ export default function LayoutPrincipal({ children }) {
   }, [notificaciones]);
 
   const notificacionesSinLeer = notificaciones.filter(n => !n.leido).length;
+
+  // MANEJAR CLICK EN NOTIFICACIÓN
+  const handleClickNotificacion = async (notificacion) => {
+    try {
+      await servicioNotificaciones.marcarLeida(notificacion.id_notificacion);
+      const url = obtenerUrlNotificacion(notificacion.titulo);
+      if (url) {
+        navegar(url);
+        setBandejaAbierta(false);
+      }
+      cargarNotificaciones();
+    } catch (error) {
+      console.error('Error al procesar notificación:', error);
+    }
+  };
 
   const marcarComoLeida = async (id) => {
     try {
@@ -261,27 +284,42 @@ export default function LayoutPrincipal({ children }) {
                       {notificaciones.length === 0 ? (
                         <div className="p-4 text-center text-muted small">No tienes notificaciones nuevas.</div>
                       ) : (
-                        notificaciones.map(n => (
-                          <div key={n.id_notificacion} className={`p-3 border-bottom ${n.leido ? 'bg-white' : 'bg-light-alert'}`} style={{ transition: 'background-color 0.2s' }}>
-                            <div className="d-flex justify-content-between align-items-start gap-1">
-                              <span className={`small fw-bold ${n.leido ? 'text-secondary' : 'text-dark'}`}>{n.titulo}</span>
-                              <span className="text-muted" style={{ fontSize: '9px', whiteSpace: 'nowrap' }}>
-                                {new Date(n.fecha_creacion).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
-                              </span>
-                            </div>
-                            <p className="mb-2 text-muted small mt-1" style={{ fontSize: '12px', lineHeight: '1.4' }}>{n.mensaje}</p>
-                            <div className="d-flex justify-content-end gap-2">
-                              {!n.leido && (
-                                <button className="btn btn-xs btn-outline-primary py-0 px-2 small-btn" style={{ fontSize: '11px' }} onClick={() => marcarComoLeida(n.id_notificacion)}>
-                                  <i className="bi bi-check2"></i> Leer
+                        notificaciones.map(n => {
+                          const urlNotif = obtenerUrlNotificacion(n.titulo);
+                          return (
+                            <div 
+                              key={n.id_notificacion} 
+                              className={`p-3 border-bottom ${n.leido ? 'bg-white' : 'bg-light-alert'}`} 
+                              style={{ 
+                                transition: 'background-color 0.2s',
+                                cursor: urlNotif ? 'pointer' : 'default',
+                                userSelect: 'none'
+                              }}
+                              onClick={() => urlNotif && handleClickNotificacion(n)}
+                            >
+                              <div className="d-flex justify-content-between align-items-start gap-1">
+                                <span className={`small fw-bold ${n.leido ? 'text-secondary' : 'text-dark'}`}>
+                                  {n.titulo}
+                                  {urlNotif && <i className="bi bi-arrow-right-short ms-1 text-primary" style={{ fontSize: '12px' }}></i>}
+                                </span>
+                                <span className="text-muted" style={{ fontSize: '9px', whiteSpace: 'nowrap' }}>
+                                  {new Date(n.fecha_creacion).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
+                                </span>
+                              </div>
+                              <p className="mb-2 text-muted small mt-1" style={{ fontSize: '12px', lineHeight: '1.4' }}>{n.mensaje}</p>
+                              <div className="d-flex justify-content-end gap-2">
+                                {!n.leido && (
+                                  <button className="btn btn-xs btn-outline-primary py-0 px-2 small-btn" style={{ fontSize: '11px' }} onClick={(e) => { e.stopPropagation(); marcarComoLeida(n.id_notificacion); }}>
+                                    <i className="bi bi-check2"></i> Leer
+                                  </button>
+                                )}
+                                <button className="btn btn-xs btn-outline-danger py-0 px-2 small-btn" style={{ fontSize: '11px' }} onClick={(e) => { e.stopPropagation(); eliminarNotificacion(n.id_notificacion); }}>
+                                    <i className="bi bi-trash"></i>
                                 </button>
-                              )}
-                              <button className="btn btn-xs btn-outline-danger py-0 px-2 small-btn" style={{ fontSize: '11px' }} onClick={() => eliminarNotificacion(n.id_notificacion)}>
-                                  <i className="bi bi-trash"></i>
-                              </button>
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
@@ -313,4 +351,4 @@ export default function LayoutPrincipal({ children }) {
     </div>
   );
 }
-
+

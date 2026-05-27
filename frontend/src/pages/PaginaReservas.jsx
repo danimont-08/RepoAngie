@@ -221,6 +221,16 @@ export default function PaginaReservas() {
       return;
     }
 
+    // VALIDAR SI USUARIO YA TIENE RESERVA ACTIVA
+    const tieneReservaActiva = misReservas.some(r => 
+      (r.estado === 'aprobada' || r.estado === 'activa') && 
+      new Date(r.fecha_reserva + 'T00:00:00') >= ahora
+    );
+    if (tieneReservaActiva) {
+      mostrarMensaje('warning', 'Tienes una reserva pendiente. No puedes hacer más hasta que pase esa fecha.');
+      return;
+    }
+
     setFechaSeleccionada(strFecha);
     setModalAbierto(true);
   };
@@ -392,6 +402,8 @@ export default function PaginaReservas() {
                       });
                       const estaReservado = reservasDelDia.length > 0;
                       const reservaAprobada = reservasDelDia.some(r => r.estado === 'aprobada');
+                      // VERIFICAR SI RESERVA ES DE OTRO USUARIO
+                      const esReservaAjena = reservasDelDia.some(r => r.id_apartamento !== usuario?.idApartamento);
 
                       let claseColor = 'bg-light text-dark';
                       let cursor = 'pointer';
@@ -402,9 +414,14 @@ export default function PaginaReservas() {
                         cursor = 'not-allowed';
                         title = esMuyPronto ? 'Mín 48h de anticipación' : 'Máx 90 días permitidos';
                       } else if (estaReservado) {
-                        claseColor = reservaAprobada ? 'bg-success text-white opacity-75' : 'bg-danger text-white opacity-75';
+                        // SI ES DE OTRO USUARIO → GRIS
+                        if (esReservaAjena) {
+                          claseColor = 'bg-secondary text-white opacity-75';
+                        } else {
+                          claseColor = reservaAprobada ? 'bg-success text-white opacity-75' : 'bg-danger text-white opacity-75';
+                        }
                         cursor = 'not-allowed';
-                        title = `${reservaAprobada ? 'Reserva aprobada' : 'Reservado'} — Apt ${reservasDelDia[0].id_apartamento}`;
+                        title = `${esReservaAjena ? 'Reserva de otro usuario' : (reservaAprobada ? 'Reserva aprobada' : 'Reservado')} — Apt ${reservasDelDia[0].id_apartamento}`;
                       } else if (esHoy) {
                         claseColor = 'bg-primary text-white';
                         if (noPermitido && !esAdmin) cursor = 'not-allowed';
@@ -446,6 +463,10 @@ export default function PaginaReservas() {
             <div className="d-flex align-items-center gap-2 text-muted">
               <span className="rounded-circle bg-success opacity-75 d-inline-block" style={{ width: 12, height: 12 }}></span>
               Aprobada
+            </div>
+            <div className="d-flex align-items-center gap-2 text-muted">
+              <span className="rounded-circle bg-secondary opacity-75 d-inline-block" style={{ width: 12, height: 12 }}></span>
+              Otro Usuario
             </div>
             <div className="d-flex align-items-center gap-2 text-muted">
               <span className="rounded-circle bg-primary d-inline-block" style={{ width: 12, height: 12 }}></span>
@@ -849,7 +870,7 @@ export default function PaginaReservas() {
         </>
       )}
 
-      {/* Sin modal de préstamos — el formulario es inline en la lista de reservas */}
+
     </div>
   );
 }

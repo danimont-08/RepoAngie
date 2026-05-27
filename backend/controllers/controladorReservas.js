@@ -73,6 +73,19 @@ const controladorReservas = {
         });
       }
 
+      // VALIDAR SI USUARIO TIENE RESERVA ACTIVA
+      const misReservas = await ModeloReserva.obtenerPorUsuario(id_apartamento);
+      const tieneActiva = misReservas.some(r => 
+        (r.estado === 'aprobada' || r.estado === 'activa') &&
+        new Date(r.fecha_reserva + 'T00:00:00') >= ahora
+      );
+      if (tieneActiva) {
+        return res.status(400).json({
+          exito: false,
+          mensaje: 'Tienes una reserva pendiente. No puedes hacer más hasta que pase esa fecha.'
+        });
+      }
+
       // Validar disponibilidad
       const disponible = await ModeloReserva.verificarDisponibilidad(fecha_reserva);
       if (!disponible) {
